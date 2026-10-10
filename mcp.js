@@ -187,10 +187,10 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       async ({ path }) => callApi('GET', `/api/links?path=${encodeURIComponent(path)}`));
     register('create_folder', 'Crea cartella', 'Crea una cartella o sottocartella; la cartella padre deve esistere.', { path: z.string().min(1) }, 'brain.write', write,
       async ({ path }) => callApi('POST', '/api/folders', { path }));
-    register('create_note', 'Crea nota', 'Crea un nuovo file Markdown in una cartella esistente.', { path: z.string().regex(/\.(md|markdown)$/i), content: z.string().default('') }, 'brain.write', write,
+    register('create_note', 'Crea nota', 'Crea un nuovo file Markdown in una cartella esistente. path deve includere il nome e l’estensione .md o .markdown, per esempio Progetti/Idea.md.', { path: z.string().min(1), content: z.string().default('') }, 'brain.write', write,
       async ({ path, content }) => callApi('POST', '/api/files', { path, content }));
     register('update_note', 'Aggiorna nota', 'Sostituisce il contenuto di una nota Markdown. Richiede modified_at da read_file per evitare sovrascritture concorrenti.', {
-      path: z.string().regex(/\.(md|markdown)$/i), content: z.string(), modified_at: z.string().min(1)
+      path: z.string().min(1), content: z.string(), modified_at: z.string().min(1)
     }, 'brain.write', destructive, async ({ path, content, modified_at }) => callApi('PUT', '/api/file', { path, content, modifiedAt: modified_at }));
     register('move_item', 'Sposta elemento', 'Sposta o rinomina un file o una cartella; la destinazione non deve esistere.', { from: z.string().min(1), to: z.string().min(1) }, 'brain.write', write,
       async ({ from, to }) => callApi('POST', '/api/move', { from, to }));

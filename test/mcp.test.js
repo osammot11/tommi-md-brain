@@ -72,6 +72,8 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal(listed.status, 200);
     assert.ok(listed.data.result.tools.some(tool => tool.name === 'create_note'));
     assert.deepEqual(listed.data.result.tools.find(tool => tool.name === 'create_note').securitySchemes, [{ type: 'oauth2', scopes: ['brain.write'] }]);
+    assert.equal(listed.data.result.tools.find(tool => tool.name === 'create_note').inputSchema.properties.path.pattern, undefined);
+    assert.equal(listed.data.result.tools.find(tool => tool.name === 'update_note').inputSchema.properties.path.pattern, undefined);
     assert.equal(listed.data.result.tools.find(tool => tool.name === 'get_profile')._meta['openai/profile'], true);
     assert.ok(listed.data.result.tools.find(tool => tool.name === 'get_profile').outputSchema);
     const unauth = await mcp('tools/call', { name: 'list_items', arguments: { path: '' } });
@@ -131,6 +133,8 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     const writeToken = await exchange(writeCode);
     assert.equal(writeToken.status, 200);
     const bearer = writeToken.data.access_token;
+    const invalidExtension = await mcp('tools/call', { name: 'create_note', arguments: { path: 'NonMarkdown.exe', content: 'no' } }, bearer);
+    assert.equal(invalidExtension.data.result.isError, true);
     const created = await mcp('tools/call', { name: 'create_note', arguments: { path: 'MCP.md', content: '# MCP' } }, bearer);
     assert.equal(created.data.result.structuredContent.path, 'MCP.md');
     const file = await mcp('tools/call', { name: 'read_file', arguments: { path: 'MCP.md' } }, bearer);
