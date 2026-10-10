@@ -242,7 +242,7 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       const requestId = authorizationRequest(state, challenge, [...new Set(scopes)].join(' '));
       const permissions = scopes.includes('brain.write') ? 'lettura e modifica' : 'sola lettura';
       const html = `<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collega ChatGPT a Brain</title><main><h1>Collega ChatGPT a Brain</h1><p>ChatGPT chiede accesso in ${permissions} al tuo archivio personale. Autorizza solo se hai iniziato tu il collegamento. Questa richiesta resta valida per 30 minuti.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="request_id" value="${escapeHtml(requestId)}"><label>Password Brain <input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Autorizza</button></form></main></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'", 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self' https://chatgpt.com; frame-ancestors 'none'", 'X-Content-Type-Options': 'nosniff' });
       return res.end(html);
     }
     if (url.pathname === '/oauth/authorize' && req.method === 'POST') {

@@ -39,6 +39,7 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     const query = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope, state: 'test-state' });
     const page = await fetch(`${base}/oauth/authorize?${query}`);
     assert.equal(page.status, 200);
+    assert.match(page.headers.get('content-security-policy'), /form-action 'self' https:\/\/chatgpt\.com/);
     const html = await page.text();
     const requestId = /name="request_id" value="([^"]+)"/.exec(html)?.[1];
     assert.ok(requestId);
