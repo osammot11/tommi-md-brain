@@ -107,6 +107,11 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal(restartGrant.status, 302, 'il modulo OAuth resta valido dopo il riavvio del processo');
     const restartCode = new URL(restartGrant.headers.get('location')).searchParams.get('code');
     assert.equal((await exchange(restartCode)).status, 200);
+    const repeatedGrant = await fetch(`${base}/oauth/authorize`, { method: 'POST', body: new URLSearchParams({ request_id: restartRequestId, password: 'test-password' }), redirect: 'manual' });
+    assert.equal(repeatedGrant.status, 302, 'un secondo invio del modulo valido non appare come scaduto');
+    const repeatedCode = new URL(repeatedGrant.headers.get('location')).searchParams.get('code');
+    assert.notEqual(repeatedCode, restartCode);
+    assert.equal((await exchange(repeatedCode)).status, 200);
 
     const invalidCode = await authorize('brain.read');
     const badVerifier = await fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code: invalidCode, code_verifier: 'x'.repeat(64) }) });

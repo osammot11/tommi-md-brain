@@ -41,7 +41,6 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
   const issuer = publicUrl.replace(/\/$/, '');
   const resource = `${issuer}/mcp`;
   const signingKey = createHmac('sha256', secret).update('tommi-brain-mcp-oauth-v1').digest();
-  const usedRequests = new Map();
   const codes = new Map();
   const loginAttempts = new Map();
   const profileId = `brain-${createHash('sha256').update(issuer).digest('hex').slice(0, 24)}`;
@@ -220,7 +219,6 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
 
   async function handle(req, res, url) {
     const now = Date.now();
-    for (const [key, value] of usedRequests) if (value <= now) usedRequests.delete(key);
     for (const [key, value] of codes) if (value.expires <= now) codes.delete(key);
     if (url.pathname === '/.well-known/oauth-protected-resource' || url.pathname === '/.well-known/oauth-protected-resource/mcp') {
       if (req.method !== 'GET') return oauthError(res, 405, 'invalid_request', 'Metodo non consentito');
@@ -251,7 +249,7 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       const form = new URLSearchParams(await readBody(req));
       const requestId = form.get('request_id') || '';
       const grant = verifyAuthorizationRequest(requestId);
-      if (!grant || usedRequests.has(hash(requestId))) {
+      if (!grant) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
         return res.end('<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Richiesta scaduta</title><main><h1>Richiesta scaduta</h1><p>Chiudi questa pagina e avvia di nuovo il collegamento da ChatGPT. Apri la nuova pagina Brain e autorizza entro 30 minuti.</p></main></html>');
       }
@@ -269,7 +267,6 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       }
       loginAttempts.delete(attemptKey);
       if (codes.size >= 1000) return oauthError(res, 429, 'temporarily_unavailable', 'Troppe autorizzazioni in corso');
-      usedRequests.set(hash(requestId), grant.exp * 1000);
       const code = randomId();
       codes.set(hash(code), { state: grant.state, challenge: grant.challenge, scope: grant.scope, expires: Date.now() + AUTH_CODE_MS });
       const redirect = new URL(CHATGPT_REDIRECT);
