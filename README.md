@@ -40,18 +40,11 @@ Apri `http://127.0.0.1:3000`. La cartella predefinita dei dati è `./data` ed è
 
 ## Installazione su VPS IONOS
 
-Questi passaggi sono una traccia per una VPS Linux con systemd e Caddy. Dominio, distribuzione e accesso SSH verranno definiti prima del deploy effettivo.
-
-1. Installa Node.js 22+ e Caddy, crea un utente di sistema dedicato e copia il progetto in `/opt/tommi-brain`.
-2. Crea `/var/lib/tommi-brain` come cartella dati scrivibile solo dall’utente dedicato.
-3. Crea `/var/lib/tommi-brain-backups` con gli stessi permessi della cartella dati. Crea `/etc/tommi-brain.env` con `BRAIN_PASSWORD`, `BRAIN_SESSION_SECRET`, `BRAIN_DATA_DIR=/var/lib/tommi-brain`, `BRAIN_BACKUP_DIR=/var/lib/tommi-brain-backups`, `PORT=3000`, `BRAIN_SECURE_COOKIE=1`. Imposta i permessi a `0600`.
-4. Adatta e installa [`deploy/tommi-brain.service`](deploy/tommi-brain.service) e [`deploy/Caddyfile`](deploy/Caddyfile). Sostituisci il dominio di esempio.
-5. Punta il DNS del dominio alla VPS, abilita HTTPS con Caddy e lascia Node in ascolto solo su `127.0.0.1`.
-6. Il server crea un backup all’avvio e poi uno al giorno, conservando le ultime 7 copie per impostazione predefinita. Per proteggerti anche da un guasto o una perdita della VPS, replica `/var/lib/tommi-brain-backups` su un supporto esterno o remoto.
+Per Ubuntu 24.04, l’utente sudo `deploy` e `brain.produceavalue.com`, segui la [guida passo passo](docs/deploy-ionos.md). I file [`deploy/tommi-brain.service`](deploy/tommi-brain.service) e [`deploy/Caddyfile`](deploy/Caddyfile) sono già predisposti per questa configurazione.
 
 Per ripristinare un backup completo, ferma il servizio, conserva una copia della cartella dati corrente, copia il contenuto della cartella di backup scelta in `BRAIN_DATA_DIR`, controlla proprietà e permessi dei file, poi riavvia il servizio. Il pannello **Backup** mostra le copie disponibili e permette di crearne una subito.
 
-Il deploy non è stato eseguito: mancano i dettagli della VPS.
+Il deploy non è ancora stato eseguito sulla VPS.
 
 ## API e futura integrazione MCP
 

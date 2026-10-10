@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=tommi-brain
-Group=tommi-brain
+User=deploy
+Group=deploy
 WorkingDirectory=/opt/tommi-brain
 EnvironmentFile=/etc/tommi-brain.env
 ExecStart=/usr/bin/node /opt/tommi-brain/server.js
