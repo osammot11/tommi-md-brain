@@ -5,6 +5,7 @@ import { dirname, extname, join, resolve, sep, basename } from 'node:path';
 import { posix } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { createMcpHandler } from './mcp.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(process.env.BRAIN_DATA_DIR || join(here, 'data'));
@@ -16,7 +17,8 @@ const backupRoot = resolve(process.env.BRAIN_BACKUP_DIR || `${root}-backups`);
 const port = Number(process.env.PORT || 3000);
 const password = process.env.BRAIN_PASSWORD || '';
 const secret = process.env.BRAIN_SESSION_SECRET || '';
-const apiToken = process.env.BRAIN_API_TOKEN || '';
+const configuredApiToken = process.env.BRAIN_API_TOKEN || '';
+const apiToken = configuredApiToken || randomBytes(32).toString('hex');
 const secureCookie = process.env.BRAIN_SECURE_COOKIE === '1';
 const maxText = 2 * 1024 * 1024;
 const maxUpload = 25 * 1024 * 1024;
@@ -435,7 +437,7 @@ async function staticFile(req, res, url) {
   res.end(req.method === 'HEAD' ? undefined : body);
 }
 
-if (!password || password === 'change-this-long-password' || secret.length < 32 || secret.startsWith('replace-with-') || (apiToken && apiToken.length < 32)) {
+if (!password || password === 'change-this-long-password' || secret.length < 32 || secret.startsWith('replace-with-') || (configuredApiToken && configuredApiToken.length < 32)) {
   console.error('Imposta BRAIN_PASSWORD e BRAIN_SESSION_SECRET (almeno 32 caratteri); l’eventuale BRAIN_API_TOKEN richiede almeno 32 caratteri.');
   process.exit(1);
 }
@@ -445,12 +447,14 @@ if (backupRoot === root || backupRoot.startsWith(root + sep)) {
 }
 await fs.mkdir(root, { recursive: true });
 await Promise.all([fs.mkdir(trashDir, { recursive: true }), fs.mkdir(versionsDir, { recursive: true }), fs.mkdir(templatesDir, { recursive: true })]);
+const mcp = createMcpHandler({ port, password, secret, apiToken, publicUrl: process.env.BRAIN_PUBLIC_URL || 'https://brain.produceavalue.com' });
 makeBackup().catch(e => console.error('Backup automatico non riuscito:', e));
 setInterval(() => makeBackup().catch(e => console.error('Backup automatico non riuscito:', e)), 60 * 60 * 1000).unref();
 createServer(async (req, res) => {
   try {
-    checkOrigin(req);
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname !== '/mcp') checkOrigin(req);
+    if (await mcp.handle(req, res, url) !== false) return;
     if (url.pathname.startsWith('/api/')) await api(req, res, url);
     else await staticFile(req, res, url);
   } catch (e) {

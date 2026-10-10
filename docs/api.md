@@ -4,7 +4,7 @@ Tutti i percorsi dei file sono relativi alla cartella dati e usano `/` come sepa
 
 Autenticazione browser: `POST /api/login` con `{ "password": "..." }` crea un cookie HttpOnly. `POST /api/logout` lo cancella. `GET /api/session` restituisce `{ "authenticated": true|false }`.
 
-Autenticazione per futuri client MCP: imposta `BRAIN_API_TOKEN` (almeno 32 caratteri) e invia `Authorization: Bearer <token>`. Usa HTTPS. Non inserire il token nel codice del frontend o negli URL.
+Autenticazione per client API esterni: imposta `BRAIN_API_TOKEN` (almeno 32 caratteri) e invia `Authorization: Bearer <token>`. Usa HTTPS. Non inserire il token nel codice del frontend o negli URL. Se non è configurato, il processo genera un token interno temporaneo utilizzato solo dal server MCP integrato. ChatGPT si autentica tramite OAuth, non con questo token API.
 
 | Metodo | Endpoint | Scopo |
 | --- | --- | --- |
@@ -32,4 +32,4 @@ Autenticazione per futuri client MCP: imposta `BRAIN_API_TOKEN` (almeno 32 carat
 
 `PUT /api/file` restituisce HTTP 409 se `modifiedAt` non corrisponde alla versione sul disco. Creazione, caricamento e spostamento restituiscono 409 se la destinazione esiste già. L’upload è limitato a 25 MB, l’editor a 2 MB per file.
 
-Per un MCP, le prime operazioni naturali sono `list_folders`, `list_items`, `read_file`, `search_files`, `create_note`, `update_note`, `move_item` e `delete_item`. Le operazioni distruttive dovrebbero chiedere conferma nell’esperienza del plugin.
+Il server MCP è documentato in [`mcp-chatgpt.md`](mcp-chatgpt.md). Le operazioni distruttive espongono annotazioni MCP affinché il client possa richiedere conferma; il server verifica sempre credenziali e permessi.
