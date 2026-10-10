@@ -1,6 +1,6 @@
 # Deploy su IONOS: Ubuntu 24.04
 
-Questa guida usa l’utente `deploy`, systemd, Node.js 24 LTS e Caddy per `brain.produceavalue.com`. Esegui i comandi sulla VPS via SSH come `deploy`, salvo dove è indicato il pannello IONOS. Non copiare la cartella locale `data` né il file `.env` nel repository.
+Questa guida usa l’utente `deploy`, systemd, Node.js 22 già installato e Nginx già in uso per `brain.produceavalue.com`. La porta 3000 è occupata da un’altra app: Brain userà la 3100, dopo aver verificato che sia libera. Esegui i comandi sulla VPS via SSH come `deploy`, salvo dove è indicato il pannello DNS. Non copiare la cartella locale `data` né il file `.env` nel repository.
 
 ## 1. Controlli iniziali
 
@@ -8,16 +8,17 @@ Questa guida usa l’utente `deploy`, systemd, Node.js 24 LTS e Caddy per `brain
 whoami
 sudo -v
 cat /etc/os-release
-node --version 2>/dev/null || true
-sudo ss -ltnp | grep -E ':(80|443|3000)\b' || true
+node --version
+command -v node
+sudo ss -ltnp | grep -E ':(80|443|3000|3100)\b' || true
 sudo ufw status
 ```
 
-`whoami` deve stampare `deploy`. Se le porte 80 o 443 sono già occupate da Nginx, Apache o un altro proxy, integra questo sito nel proxy esistente: non sostituire il servizio né la sua configurazione.
+`whoami` deve stampare `deploy`. Nginx usa già le porte 80/443; un’altra app Node usa la 3000. La porta 3100 deve risultare libera prima di continuare. Mantieni i siti e i servizi esistenti.
 
 ## 2. DNS
 
-Nel pannello IONOS, sotto **Domini e SSL → produceavalue.com → DNS**, aggiungi o modifica un record **A** con host `brain` e indirizzo IPv4 pubblico della VPS. Elimina eventuali record A/AAAA per `brain` che puntano altrove. Crea un record AAAA solo se hai IPv6 configurato sulla VPS. Dal server verifica:
+Nel pannello del provider che gestisce il DNS di `produceavalue.com`, aggiungi o modifica un record **A** con host `brain` e indirizzo IPv4 pubblico della VPS. Elimina eventuali record A/AAAA per `brain` che puntano altrove. Crea un record AAAA solo se hai IPv6 configurato sulla VPS. Dal server verifica:
 
 ```bash
 getent ahostsv4 brain.produceavalue.com
@@ -27,19 +28,13 @@ Deve apparire l’IPv4 pubblico della VPS. La propagazione DNS può richiedere t
 
 ## 3. Node.js e Git
 
-Se `node --version` mostra già la versione 22 o 24 e `command -v node` restituisce `/usr/bin/node`, puoi saltare l’installazione di Node. Altrimenti installa Node.js 24 LTS dal repository NodeSource. Scarica lo script separatamente prima di eseguirlo:
+Sulla VPS è già disponibile Node.js 22.22.3 in `/usr/local/bin/node`, compatibile con il progetto. Verifica che Git sia installato:
 
 ```bash
-sudo apt update
-sudo apt install -y ca-certificates curl git gnupg
-curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource_setup_24.sh
-sudo bash /tmp/nodesource_setup_24.sh
-sudo apt install -y nodejs
-node --version
-command -v node
+git --version
 ```
 
-Il servizio incluso si aspetta `/usr/bin/node`. Se il percorso è diverso, modifica `ExecStart` nel file service prima di installarlo. Non serve `npm install`: il progetto non ha dipendenze npm.
+Se Git manca, installalo con `sudo apt update` e `sudo apt install -y git`. Il servizio incluso usa `/usr/local/bin/node`. Non serve `npm install`: il progetto non ha dipendenze npm.
 
 ## 4. Codice, dati e credenziali
 
@@ -59,7 +54,7 @@ BRAIN_SESSION_SECRET=LA_CHIAVE_CASUALE_GENERATA
 BRAIN_DATA_DIR=/var/lib/tommi-brain
 BRAIN_BACKUP_DIR=/var/lib/tommi-brain-backups
 BRAIN_BACKUP_RETENTION=7
-PORT=3000
+PORT=3100
 BRAIN_SECURE_COOKIE=1
 ```
 
@@ -72,47 +67,46 @@ sudo cp /opt/tommi-brain/deploy/tommi-brain.service /etc/systemd/system/tommi-br
 sudo systemctl daemon-reload
 sudo systemctl enable --now tommi-brain
 sudo systemctl status tommi-brain --no-pager
-curl -I http://127.0.0.1:3000/
+curl -I http://127.0.0.1:3100/
 ```
 
-Il test locale deve dare `HTTP/1.1 200 OK`. Se il servizio fallisce, leggi `sudo journalctl -u tommi-brain -n 80 --no-pager`. La porta 3000 deve restare chiusa verso Internet; Node ascolta solo su `127.0.0.1`.
+Il test locale deve dare `HTTP/1.1 200 OK`. Se il servizio fallisce, leggi `sudo journalctl -u tommi-brain -n 80 --no-pager`. La porta 3100 deve restare chiusa verso Internet; Node ascolta solo su `127.0.0.1`.
 
-## 6. Caddy e HTTPS
+## 6. Nginx e HTTPS
 
-Se Caddy non è già installato e le porte 80/443 sono libere, installalo tramite il repository ufficiale:
+Questa VPS usa già Nginx: aggiungi un sito senza sostituire le configurazioni degli altri. Controlla prima che `brain.produceavalue.com` non sia già configurato:
 
 ```bash
-sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
-sudo apt update
-sudo apt install -y caddy
+sudo nginx -T 2>&1 | grep -F 'server_name brain.produceavalue.com' || true
 ```
 
-Se l’attuale `/etc/caddy/Caddyfile` serve altri siti, aggiungi il blocco contenuto in `/opt/tommi-brain/deploy/Caddyfile` al file esistente. Se è la configurazione predefinita e non hai altri siti, puoi sostituirla conservando una copia:
+Se non esiste già, installa solo il nuovo file e convalida l’intera configurazione prima del reload:
 
 ```bash
-sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.before-brain
-sudo cp /opt/tommi-brain/deploy/Caddyfile /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
+sudo cp /opt/tommi-brain/deploy/brain.nginx.conf /etc/nginx/sites-available/brain.produceavalue.com
+sudo ln -s /etc/nginx/sites-available/brain.produceavalue.com /etc/nginx/sites-enabled/brain.produceavalue.com
+sudo nginx -t
+sudo systemctl reload nginx
+curl -I -H 'Host: brain.produceavalue.com' http://127.0.0.1/
 ```
 
-Apri le porte TCP 80 e 443 nel firewall della VPS nel pannello IONOS. Se UFW è attivo, esegui anche:
+L’ultimo comando deve dare `HTTP/1.1 200 OK`. Le porte 80/443 sono già permesse da UFW con `Nginx Full`. Se c’è anche un firewall nel pannello IONOS, verifica che consenta il traffico sulle stesse porte. Attendi che il DNS A risolva all’IP della VPS prima di chiedere il certificato.
+
+Se Certbot è già installato e gestisce i certificati degli altri siti, usa quello esistente. Esegui:
 
 ```bash
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
+sudo certbot --nginx -d brain.produceavalue.com
+sudo nginx -t
+sudo systemctl reload nginx
 ```
 
-Mantieni aperta la porta SSH in uso. Caddy ottiene e rinnova automaticamente il certificato HTTPS quando DNS e porte 80/443 sono corretti.
+Se Certbot non è installato, installalo seguendo le [istruzioni ufficiali per Nginx](https://certbot.eff.org/instructions?ws=nginx&os=snap), poi esegui lo stesso comando. Scegli il reindirizzamento HTTP → HTTPS quando richiesto. Non eseguire Certbot finché il DNS non punta alla VPS.
 
 ## 7. Verifica e aggiornamenti
 
 ```bash
 curl -I https://brain.produceavalue.com/
-sudo systemctl status tommi-brain caddy --no-pager
+sudo systemctl status tommi-brain nginx --no-pager
 ```
 
 Apri `https://brain.produceavalue.com` nel browser e accedi con la password impostata. Per aggiornare il codice:

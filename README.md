@@ -40,7 +40,7 @@ Apri `http://127.0.0.1:3000`. La cartella predefinita dei dati è `./data` ed è
 
 ## Installazione su VPS IONOS
 
-Per Ubuntu 24.04, l’utente sudo `deploy` e `brain.produceavalue.com`, segui la [guida passo passo](docs/deploy-ionos.md). I file [`deploy/tommi-brain.service`](deploy/tommi-brain.service) e [`deploy/Caddyfile`](deploy/Caddyfile) sono già predisposti per questa configurazione.
+Per Ubuntu 24.04, l’utente sudo `deploy`, Nginx già presente e `brain.produceavalue.com`, segui la [guida passo passo](docs/deploy-ionos.md). I file [`deploy/tommi-brain.service`](deploy/tommi-brain.service) e [`deploy/brain.nginx.conf`](deploy/brain.nginx.conf) sono predisposti per questa VPS.
 
 Per ripristinare un backup completo, ferma il servizio, conserva una copia della cartella dati corrente, copia il contenuto della cartella di backup scelta in `BRAIN_DATA_DIR`, controlla proprietà e permessi dei file, poi riavvia il servizio. Il pannello **Backup** mostra le copie disponibili e permette di crearne una subito.
 
