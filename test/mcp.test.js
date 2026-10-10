@@ -20,11 +20,9 @@ test('MCP e OAuth proteggono note e scritture', async () => {
   const backupDir = `${dataDir}-backups`;
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
-  const child = spawn(process.execPath, ['server.js'], {
-    cwd: process.cwd(),
-    env: { ...process.env, PORT: String(port), BRAIN_PUBLIC_URL: base, BRAIN_DATA_DIR: dataDir, BRAIN_BACKUP_DIR: backupDir, BRAIN_PASSWORD: 'test-password', BRAIN_SESSION_SECRET: 's'.repeat(64), BRAIN_API_TOKEN: '' },
-    stdio: 'ignore'
-  });
+  const serverEnv = { ...process.env, PORT: String(port), BRAIN_PUBLIC_URL: base, BRAIN_DATA_DIR: dataDir, BRAIN_BACKUP_DIR: backupDir, BRAIN_PASSWORD: 'test-password', BRAIN_SESSION_SECRET: 's'.repeat(64), BRAIN_API_TOKEN: '' };
+  const startServer = () => spawn(process.execPath, ['server.js'], { cwd: process.cwd(), env: serverEnv, stdio: 'ignore' });
+  let child = startServer();
   const mcp = async (method, params = {}, bearer = '') => {
     const response = await fetch(`${base}/mcp`, {
       method: 'POST',
@@ -91,6 +89,24 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal(staleGrant.status, 400);
     assert.match(staleGrant.headers.get('content-type'), /text\/html/);
     assert.match(await staleGrant.text(), /avvia di nuovo il collegamento da ChatGPT/);
+
+    const restartQuery = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope: 'brain.read', state: 'restart-state' });
+    const restartPage = await fetch(`${base}/oauth/authorize?${restartQuery}`);
+    const restartRequestId = /name="request_id" value="([^"]+)"/.exec(await restartPage.text())?.[1];
+    assert.ok(restartRequestId);
+    const exited = new Promise(resolve => child.once('exit', resolve));
+    child.kill();
+    await exited;
+    child = startServer();
+    let restarted = false;
+    for (let i = 0; i < 50; i++) {
+      try { await fetch(`${base}/api/session`); restarted = true; break; } catch { await new Promise(resolve => setTimeout(resolve, 50)); }
+    }
+    assert.ok(restarted);
+    const restartGrant = await fetch(`${base}/oauth/authorize`, { method: 'POST', body: new URLSearchParams({ request_id: restartRequestId, password: 'test-password' }), redirect: 'manual' });
+    assert.equal(restartGrant.status, 302, 'il modulo OAuth resta valido dopo il riavvio del processo');
+    const restartCode = new URL(restartGrant.headers.get('location')).searchParams.get('code');
+    assert.equal((await exchange(restartCode)).status, 200);
 
     const invalidCode = await authorize('brain.read');
     const badVerifier = await fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code: invalidCode, code_verifier: 'x'.repeat(64) }) });

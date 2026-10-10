@@ -41,7 +41,7 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
   const issuer = publicUrl.replace(/\/$/, '');
   const resource = `${issuer}/mcp`;
   const signingKey = createHmac('sha256', secret).update('tommi-brain-mcp-oauth-v1').digest();
-  const pending = new Map();
+  const usedRequests = new Map();
   const codes = new Map();
   const loginAttempts = new Map();
   const profileId = `brain-${createHash('sha256').update(issuer).digest('hex').slice(0, 24)}`;
@@ -54,7 +54,7 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
     return `${unsigned}.${signature}`;
   }
 
-  function verifyToken(value, expectedType) {
+  function verifySignedPayload(value) {
     if (typeof value !== 'string' || value.length > 4096) return null;
     const parts = value.split('.');
     if (parts.length !== 3) return null;
@@ -65,10 +65,29 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
     try {
       const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
       const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-      if (header.alg !== 'HS256' || header.typ !== 'JWT' || payload.typ !== expectedType || payload.iss !== issuer || payload.aud !== resource || payload.sub !== profileId || payload.client_id !== CHATGPT_CLIENT_ID || !Number.isInteger(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000) || !Number.isInteger(payload.iat) || payload.iat > Math.floor(Date.now() / 1000) + 60 || typeof payload.scope !== 'string') return null;
+      if (header.alg !== 'HS256' || header.typ !== 'JWT' || payload.iss !== issuer || payload.aud !== resource || payload.client_id !== CHATGPT_CLIENT_ID || !Number.isInteger(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000) || !Number.isInteger(payload.iat) || payload.iat > Math.floor(Date.now() / 1000) + 60 || typeof payload.scope !== 'string') return null;
       if (payload.scope.split(' ').some(scope => !SCOPES.has(scope))) return null;
       return payload;
     } catch { return null; }
+  }
+
+  function verifyToken(value, expectedType) {
+    const payload = verifySignedPayload(value);
+    return payload?.typ === expectedType && payload.sub === profileId ? payload : null;
+  }
+
+  function authorizationRequest(state, challenge, scope) {
+    const now = Math.floor(Date.now() / 1000);
+    return token({ typ: 'oauth_request', iss: issuer, aud: resource, client_id: CHATGPT_CLIENT_ID,
+      state, challenge, scope, iat: now, exp: now + AUTH_REQUEST_MS / 1000, jti: randomId() });
+  }
+
+  function verifyAuthorizationRequest(value) {
+    const payload = verifySignedPayload(value);
+    if (payload?.typ !== 'oauth_request' || typeof payload.state !== 'string' || !payload.state || payload.state.length > 1024 ||
+      typeof payload.challenge !== 'string' || !/^[A-Za-z0-9_-]{43,128}$/.test(payload.challenge) ||
+      !payload.scope.split(' ').every(scope => SCOPES.has(scope))) return null;
+    return payload;
   }
 
   function issueTokens(scope) {
@@ -201,7 +220,7 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
 
   async function handle(req, res, url) {
     const now = Date.now();
-    for (const [key, value] of pending) if (value.expires <= now) pending.delete(key);
+    for (const [key, value] of usedRequests) if (value <= now) usedRequests.delete(key);
     for (const [key, value] of codes) if (value.expires <= now) codes.delete(key);
     if (url.pathname === '/.well-known/oauth-protected-resource' || url.pathname === '/.well-known/oauth-protected-resource/mcp') {
       if (req.method !== 'GET') return oauthError(res, 405, 'invalid_request', 'Metodo non consentito');
@@ -222,9 +241,7 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       const state = params.get('state') || '';
       const challenge = params.get('code_challenge') || '';
       if (params.get('response_type') !== 'code' || params.get('client_id') !== CHATGPT_CLIENT_ID || params.get('redirect_uri') !== CHATGPT_REDIRECT || params.get('code_challenge_method') !== 'S256' || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge) || params.get('resource') !== resource || scopes.some(scope => !SCOPES.has(scope)) || !scopes.length || !state || state.length > 1024) return authorizationError(res, params, 'invalid_request', 'Richiesta OAuth non valida');
-      if (pending.size >= 1000) return authorizationError(res, params, 'temporarily_unavailable', 'Troppe richieste OAuth in corso');
-      const requestId = randomId();
-      pending.set(requestId, { state, challenge, scope: [...new Set(scopes)].join(' '), expires: Date.now() + AUTH_REQUEST_MS });
+      const requestId = authorizationRequest(state, challenge, [...new Set(scopes)].join(' '));
       const permissions = scopes.includes('brain.write') ? 'lettura e modifica' : 'sola lettura';
       const html = `<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collega ChatGPT a Brain</title><main><h1>Collega ChatGPT a Brain</h1><p>ChatGPT chiede accesso in ${permissions} al tuo archivio personale. Autorizza solo se hai iniziato tu il collegamento. Questa richiesta resta valida per 30 minuti.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="request_id" value="${escapeHtml(requestId)}"><label>Password Brain <input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Autorizza</button></form></main></html>`;
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'", 'X-Content-Type-Options': 'nosniff' });
@@ -233,8 +250,8 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
     if (url.pathname === '/oauth/authorize' && req.method === 'POST') {
       const form = new URLSearchParams(await readBody(req));
       const requestId = form.get('request_id') || '';
-      const grant = pending.get(requestId);
-      if (!grant || grant.expires <= Date.now()) {
+      const grant = verifyAuthorizationRequest(requestId);
+      if (!grant || usedRequests.has(hash(requestId))) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
         return res.end('<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Richiesta scaduta</title><main><h1>Richiesta scaduta</h1><p>Chiudi questa pagina e avvia di nuovo il collegamento da ChatGPT. Apri la nuova pagina Brain e autorizza entro 30 minuti.</p></main></html>');
       }
@@ -251,10 +268,10 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
         return oauthError(res, 401, 'access_denied', 'Password errata; torna indietro e riprova');
       }
       loginAttempts.delete(attemptKey);
-      pending.delete(requestId);
       if (codes.size >= 1000) return oauthError(res, 429, 'temporarily_unavailable', 'Troppe autorizzazioni in corso');
+      usedRequests.set(hash(requestId), grant.exp * 1000);
       const code = randomId();
-      codes.set(hash(code), { ...grant, expires: Date.now() + AUTH_CODE_MS });
+      codes.set(hash(code), { state: grant.state, challenge: grant.challenge, scope: grant.scope, expires: Date.now() + AUTH_CODE_MS });
       const redirect = new URL(CHATGPT_REDIRECT);
       redirect.searchParams.set('code', code);
       if (grant.state) redirect.searchParams.set('state', grant.state);
