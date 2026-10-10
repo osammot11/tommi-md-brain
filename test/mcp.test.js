@@ -87,6 +87,10 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal(badScopeRedirect.searchParams.get('error'), 'invalid_request');
     assert.equal(badScopeRedirect.searchParams.get('iss'), base);
     assert.equal(badScopeRedirect.searchParams.get('state'), 'invalid-scope-state');
+    const staleGrant = await fetch(`${base}/oauth/authorize`, { method: 'POST', body: new URLSearchParams({ request_id: 'missing', password: 'test-password' }) });
+    assert.equal(staleGrant.status, 400);
+    assert.match(staleGrant.headers.get('content-type'), /text\/html/);
+    assert.match(await staleGrant.text(), /avvia di nuovo il collegamento da ChatGPT/);
 
     const invalidCode = await authorize('brain.read');
     const badVerifier = await fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code: invalidCode, code_verifier: 'x'.repeat(64) }) });

@@ -7,6 +7,7 @@ import { z } from 'zod';
 const CHATGPT_CLIENT_ID = 'https://chatgpt.com/oauth/client.json';
 const CHATGPT_REDIRECT = 'https://chatgpt.com/connector_platform_oauth_redirect';
 const SCOPES = new Set(['brain.read', 'brain.write']);
+const AUTH_REQUEST_MS = 30 * 60_000;
 const AUTH_CODE_MS = 5 * 60_000;
 const ACCESS_TOKEN_SECONDS = 60 * 60;
 const REFRESH_TOKEN_SECONDS = 30 * 24 * 60 * 60;
@@ -223,9 +224,9 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       if (params.get('response_type') !== 'code' || params.get('client_id') !== CHATGPT_CLIENT_ID || params.get('redirect_uri') !== CHATGPT_REDIRECT || params.get('code_challenge_method') !== 'S256' || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge) || params.get('resource') !== resource || scopes.some(scope => !SCOPES.has(scope)) || !scopes.length || !state || state.length > 1024) return authorizationError(res, params, 'invalid_request', 'Richiesta OAuth non valida');
       if (pending.size >= 1000) return authorizationError(res, params, 'temporarily_unavailable', 'Troppe richieste OAuth in corso');
       const requestId = randomId();
-      pending.set(requestId, { state, challenge, scope: [...new Set(scopes)].join(' '), expires: Date.now() + 10 * 60_000 });
+      pending.set(requestId, { state, challenge, scope: [...new Set(scopes)].join(' '), expires: Date.now() + AUTH_REQUEST_MS });
       const permissions = scopes.includes('brain.write') ? 'lettura e modifica' : 'sola lettura';
-      const html = `<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collega ChatGPT a Brain</title><main><h1>Collega ChatGPT a Brain</h1><p>ChatGPT chiede accesso in ${permissions} al tuo archivio personale. Autorizza solo se hai iniziato tu il collegamento.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="request_id" value="${escapeHtml(requestId)}"><label>Password Brain <input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Autorizza</button></form></main></html>`;
+      const html = `<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collega ChatGPT a Brain</title><main><h1>Collega ChatGPT a Brain</h1><p>ChatGPT chiede accesso in ${permissions} al tuo archivio personale. Autorizza solo se hai iniziato tu il collegamento. Questa richiesta resta valida per 30 minuti.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="request_id" value="${escapeHtml(requestId)}"><label>Password Brain <input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Autorizza</button></form></main></html>`;
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'", 'X-Content-Type-Options': 'nosniff' });
       return res.end(html);
     }
@@ -233,7 +234,10 @@ export function createMcpHandler({ port, password, secret, apiToken, publicUrl =
       const form = new URLSearchParams(await readBody(req));
       const requestId = form.get('request_id') || '';
       const grant = pending.get(requestId);
-      if (!grant || grant.expires <= Date.now()) return oauthError(res, 400, 'invalid_request', 'Richiesta scaduta: riavvia il collegamento');
+      if (!grant || grant.expires <= Date.now()) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'", 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' });
+        return res.end('<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Richiesta scaduta</title><main><h1>Richiesta scaduta</h1><p>Chiudi questa pagina e avvia di nuovo il collegamento da ChatGPT. Apri la nuova pagina Brain e autorizza entro 30 minuti.</p></main></html>');
+      }
       const attemptKey = 'oauth-password';
       const attempt = loginAttempts.get(attemptKey) || { count: 0, until: 0 };
       if (attempt.until > Date.now()) return oauthError(res, 429, 'access_denied', 'Troppi tentativi, riprova tra cinque minuti');
