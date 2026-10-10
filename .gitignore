@@ -1,0 +1,6 @@
+node_modules/
+data/
+data-backups/
+.env
+.DS_Store
+coverage/

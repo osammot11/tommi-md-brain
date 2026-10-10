@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f4f0">
+  <title>Tommi Brain</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <section id="login" class="login-screen hidden">
+    <form id="login-form" class="login-card">
+      <div class="brand-mark large">◈</div>
+      <h1>Tommi Brain</h1>
+      <p>Il tuo spazio per pensare, scrivere e organizzare.</p>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" required autofocus>
+      <button class="button primary full" type="submit">Entra <span>→</span></button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </section>
+
+  <div id="app" class="app hidden">
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-top">
+        <div class="brand"><div class="brand-mark">◈</div><div><strong>Tommi Brain</strong><small>Il tuo spazio personale</small></div></div>
+        <button id="sidebar-close" class="icon-button mobile-only" aria-label="Chiudi menu">×</button>
+      </div>
+      <button id="home-button" class="nav-item active"><span class="nav-icon">⌂</span> Tutti i file</button>
+      <div class="sidebar-heading"><span>CARTELLE</span><button id="sidebar-new-folder" class="subtle-icon" title="Nuova cartella" aria-label="Nuova cartella">＋</button></div>
+      <nav id="folder-tree" class="folder-tree" aria-label="Cartelle"></nav>
+      <div class="sidebar-bottom"><button id="trash-button" class="nav-item"><span class="nav-icon">♻</span> Cestino</button><button id="backups-button" class="nav-item"><span class="nav-icon">◷</span> Backup</button><button id="logout-button" class="nav-item"><span class="nav-icon">↪</span> Esci</button></div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div class="topbar-left"><button id="menu-button" class="icon-button mobile-only" aria-label="Apri menu">☰</button><div id="breadcrumbs" class="breadcrumbs"></div></div>
+        <div class="topbar-actions"><div class="search-box"><span>⌕</span><input id="search" type="search" placeholder="Cerca tra le note..." aria-label="Cerca file e contenuto"><kbd>⌘ K</kbd></div><button id="new-button" class="button primary">＋ <span>Nuovo</span></button></div>
+      </header>
+      <div id="notice" class="notice hidden" role="status"></div>
+
+      <section id="browser-view" class="content">
+        <div class="page-head"><div><div class="eyebrow">IL TUO ARCHIVIO</div><h1 id="page-title">Tutti i file</h1><p id="page-subtitle">Un posto per ogni idea.</p></div><div class="page-head-actions"><button id="subfolder-button" class="button secondary hidden">＋ Sottocartella</button><button id="upload-button" class="button secondary"><span>↑</span> Carica file</button></div><input id="upload-input" type="file" multiple hidden></div>
+        <div class="list-header"><span>NOME</span><span>ULTIMA MODIFICA</span><span>DIMENSIONE</span><span></span></div>
+        <div id="items" class="items" aria-live="polite"></div>
+        <div id="empty" class="empty hidden"><div class="empty-icon">✦</div><h2>Qui c’è spazio per una nuova idea</h2><p>Crea una nota, una cartella oppure carica un file.</p><button id="empty-new" class="button primary">＋ Crea una nota</button></div>
+        <div id="search-empty" class="empty hidden"><div class="empty-icon">⌕</div><h2>Nessun risultato</h2><p>Prova con un’altra parola chiave.</p></div>
+      </section>
+
+      <section id="trash-view" class="content hidden"><div class="page-head"><div><div class="eyebrow">RECUPERO</div><h1>Cestino</h1><p>I file eliminati possono essere ripristinati.</p></div></div><div class="list-header"><span>NOME</span><span>ELIMINATO IL</span><span>TIPO</span><span></span></div><div id="trash-items" class="items"></div><div id="trash-empty" class="empty hidden"><div class="empty-icon">♻</div><h2>Il cestino è vuoto</h2><p>I file eliminati appariranno qui.</p></div></section>
+
+      <section id="file-view" class="file-view hidden">
+        <div class="file-toolbar"><button id="back-button" class="back-button">← <span>Torna ai file</span></button><div class="file-actions"><button id="history-file" class="icon-button" title="Cronologia versioni" aria-label="Cronologia versioni">◷</button><button id="template-file" class="icon-button" title="Salva come modello" aria-label="Salva come modello">▤</button><button id="rename-file" class="icon-button" title="Rinomina" aria-label="Rinomina">✎</button><button id="move-file" class="icon-button" title="Sposta" aria-label="Sposta">↗</button><button id="download-file" class="icon-button" title="Scarica" aria-label="Scarica">↓</button><button id="delete-file" class="icon-button danger-text" title="Elimina" aria-label="Elimina">⌫</button></div></div>
+        <div class="document"><div class="document-head"><div class="eyebrow" id="file-location">NOTA</div><h1 id="file-title"></h1><p id="file-meta"></p><div id="properties-panel" class="properties-panel hidden"><div id="properties-list" class="property-chips"></div><button id="edit-properties" class="property-edit">＋ Proprietà</button></div></div><div id="editor-controls" class="editor-controls"><div class="segmented"><button id="preview-tab" class="selected">Anteprima</button><button id="edit-tab">Modifica</button></div><div class="save-status"><span id="dirty-indicator"></span><button id="save-button" class="button primary" disabled>Salva</button></div></div><div id="format-toolbar" class="format-toolbar hidden"><button type="button" data-format="heading" title="Titolo">H</button><button type="button" data-format="bold" title="Grassetto">B</button><button type="button" data-format="italic" title="Corsivo"><i>I</i></button><button type="button" data-format="list" title="Elenco">☷</button><button type="button" data-format="task" title="Checklist">☑</button><button type="button" data-format="link" title="Collegamento a nota">↗</button><button id="attach-button" type="button" title="Inserisci allegato">▧ Allegato</button><input id="attachment-input" type="file" multiple hidden></div><article id="preview" class="markdown"></article><textarea id="editor" class="editor hidden" spellcheck="true" aria-label="Contenuto del file"></textarea><div id="binary-preview" class="binary-preview hidden"></div><div id="links-panel" class="links-panel hidden"><div><h3>Collegamenti</h3><div id="outbound-links"></div></div><div><h3>Citata in</h3><div id="backlinks"></div></div></div></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="dialog" class="dialog"><form id="dialog-form" method="dialog"><div class="dialog-heading"><div><div id="dialog-eyebrow" class="eyebrow">AZIONE</div><h2 id="dialog-title"></h2></div><button id="dialog-close" type="button" class="icon-button" aria-label="Chiudi">×</button></div><p id="dialog-description"></p><div id="dialog-fields"></div><div class="dialog-actions"><button id="dialog-cancel" class="button secondary" type="button">Annulla</button><button id="dialog-submit" class="button primary" type="submit">Conferma</button></div></form></dialog>
+  <dialog id="history-dialog" class="dialog wide"><div class="dialog-heading"><div><div class="eyebrow">RECUPERO</div><h2>Cronologia versioni</h2></div><button id="history-close" class="icon-button" aria-label="Chiudi">×</button></div><div id="history-list" class="history-list"></div><pre id="history-preview" class="history-preview"></pre><div class="dialog-actions"><button id="history-restore" class="button primary" disabled>Ripristina questa versione</button></div></dialog>
+  <dialog id="backup-dialog" class="dialog wide"><div class="dialog-heading"><div><div class="eyebrow">SICUREZZA</div><h2>Backup dell’archivio</h2></div><button id="backup-close" class="icon-button" aria-label="Chiudi">×</button></div><p>Una copia automatica al giorno, conservata fuori dalla cartella dei file.</p><div id="backup-details" class="backup-details"></div><div class="dialog-actions"><button id="backup-now" class="button primary">Crea backup ora</button></div></dialog>
+  <div id="drop-overlay" class="drop-overlay hidden"><div>↓<strong>Rilascia per caricare i file</strong><span>nella cartella corrente</span></div></div>
+</body>
+</html>

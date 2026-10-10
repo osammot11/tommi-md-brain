@@ -1,0 +1,21 @@
+[Unit]
+Description=Tommi Brain personal Markdown archive
+After=network.target
+
+[Service]
+Type=simple
+User=tommi-brain
+Group=tommi-brain
+WorkingDirectory=/opt/tommi-brain
+EnvironmentFile=/etc/tommi-brain.env
+ExecStart=/usr/bin/node /opt/tommi-brain/server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tommi-brain /var/lib/tommi-brain-backups
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
