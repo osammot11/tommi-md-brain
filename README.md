@@ -48,7 +48,7 @@ L’app web è in esecuzione sulla VPS; dopo ogni aggiornamento esegui `git pull
 
 ## API e integrazione MCP
 
-L’interfaccia usa gli endpoint descritti in [`docs/api.md`](docs/api.md). Il server MCP integrato espone strumenti di lettura e modifica su `/mcp`; usa l’API HTTP locale con un token interno temporaneo. Per l’autenticazione di ChatGPT pubblica un flusso OAuth 2.1 con PKCE, che richiede la password personale di Brain. La [guida MCP per ChatGPT](docs/mcp-chatgpt.md) descrive deploy, strumenti e connessione. La configurazione del plugin privato è in [`plugin/tommi-brain`](plugin/tommi-brain).
+L’interfaccia usa gli endpoint descritti in [`docs/api.md`](docs/api.md). Il server MCP integrato espone strumenti di lettura e modifica su `/mcp`; usa l’API HTTP locale con un token interno temporaneo. Per l’autenticazione di ChatGPT pubblica un flusso OAuth 2.1 con PKCE, che richiede la password personale di Brain. La [guida MCP per ChatGPT](docs/mcp-chatgpt.md) descrive deploy, strumenti, collegamento diretto e compatibilità del pacchetto privato. La configurazione di quest’ultimo è in [`plugin/tommi-brain`](plugin/tommi-brain).
 
 Una futura app desktop Tauri per macOS potrà riutilizzare l’interfaccia e comunicare con questa API. L’autenticazione e la conservazione sicura delle credenziali nel client desktop verranno progettate nella fase Tauri.
 
