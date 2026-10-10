@@ -1,6 +1,6 @@
 # Deploy su IONOS: Ubuntu 24.04
 
-Questa guida usa l’utente `deploy`, systemd, Node.js 22 già installato e Nginx già in uso per `brain.produceavalue.com`. La porta 3000 è occupata da un’altra app: Brain userà la 3100, dopo aver verificato che sia libera. Esegui i comandi sulla VPS via SSH come `deploy`, salvo dove è indicato il pannello DNS. Non copiare la cartella locale `data` né il file `.env` nel repository.
+Questa guida usa l’utente `deploy`, systemd, Node.js 22 già installato e Nginx già in uso per `brain.produceavalue.com`. Le porte 3000 e 3100 sono occupate da altre app: Brain userà la 32147, dopo aver verificato che sia libera. Esegui i comandi sulla VPS via SSH come `deploy`, salvo dove è indicato il pannello DNS. Non copiare la cartella locale `data` né il file `.env` nel repository.
 
 ## 1. Controlli iniziali
 
@@ -10,11 +10,11 @@ sudo -v
 cat /etc/os-release
 node --version
 command -v node
-sudo ss -ltnp | grep -E ':(80|443|3000|3100)\b' || true
+sudo ss -ltnp | grep -E ':(80|443|3000|3100|32147)\b' || true
 sudo ufw status
 ```
 
-`whoami` deve stampare `deploy`. Nginx usa già le porte 80/443; un’altra app Node usa la 3000. La porta 3100 deve risultare libera prima di continuare. Mantieni i siti e i servizi esistenti.
+`whoami` deve stampare `deploy`. Nginx usa già le porte 80/443; altre app usano la 3000 e la 3100. La porta 32147 deve risultare libera prima di continuare. Mantieni i siti e i servizi esistenti.
 
 ## 2. DNS
 
@@ -42,7 +42,9 @@ Se Git manca, installalo con `sudo apt update` e `sudo apt install -y git`. Il s
 sudo install -d -o deploy -g deploy -m 755 /opt/tommi-brain
 git clone https://github.com/osammot11/tommi-md-brain.git /opt/tommi-brain
 sudo install -d -o deploy -g deploy -m 700 /var/lib/tommi-brain /var/lib/tommi-brain-backups
-sudo install -m 600 -o root -g root /dev/null /etc/tommi-brain.env
+sudo touch /etc/tommi-brain.env
+sudo chown root:root /etc/tommi-brain.env
+sudo chmod 600 /etc/tommi-brain.env
 sudo nano /etc/tommi-brain.env
 ```
 
@@ -54,7 +56,7 @@ BRAIN_SESSION_SECRET=LA_CHIAVE_CASUALE_GENERATA
 BRAIN_DATA_DIR=/var/lib/tommi-brain
 BRAIN_BACKUP_DIR=/var/lib/tommi-brain-backups
 BRAIN_BACKUP_RETENTION=7
-PORT=3100
+PORT=32147
 BRAIN_SECURE_COOKIE=1
 ```
 
@@ -67,10 +69,10 @@ sudo cp /opt/tommi-brain/deploy/tommi-brain.service /etc/systemd/system/tommi-br
 sudo systemctl daemon-reload
 sudo systemctl enable --now tommi-brain
 sudo systemctl status tommi-brain --no-pager
-curl -I http://127.0.0.1:3100/
+curl -I http://127.0.0.1:32147/
 ```
 
-Il test locale deve dare `HTTP/1.1 200 OK`. Se il servizio fallisce, leggi `sudo journalctl -u tommi-brain -n 80 --no-pager`. La porta 3100 deve restare chiusa verso Internet; Node ascolta solo su `127.0.0.1`.
+Il test locale deve dare `HTTP/1.1 200 OK`. Se il servizio fallisce, leggi `sudo journalctl -u tommi-brain -n 80 --no-pager`. La porta 32147 deve restare chiusa verso Internet; Node ascolta solo su `127.0.0.1`.
 
 ## 6. Nginx e HTTPS
 
