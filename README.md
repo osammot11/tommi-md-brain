@@ -14,7 +14,7 @@ Un archivio personale self-hosted per cartelle, note Markdown e allegati. I dati
 - Accesso con password, cookie di sessione e token opzionale per client server-to-server.
 - API HTTP separata dall’interfaccia e server MCP remoto integrato con OAuth per ChatGPT.
 
-Per creare una sottocartella, apri la cartella padre e premi **Sottocartella**. Puoi ripetere l’operazione a qualsiasi livello; le sottocartelle appaiono anche nell’albero laterale.
+Per creare una sottocartella, apri la cartella padre e premi **Sottocartella**. Puoi ripetere l’operazione a qualsiasi livello; le sottocartelle appaiono anche nell’albero laterale. Il click destro su un file o una cartella apre le azioni contestuali; il pulsante accanto a **CARTELLE** chiude tutti i rami dell’albero e i triangoli aprono o chiudono i singoli rami. Su dispositivi touch puoi usare il pulsante `···` nell’elenco dei file.
 
 ## Avvio locale
 

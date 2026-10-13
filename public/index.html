@@ -28,7 +28,7 @@
         <button id="sidebar-close" class="icon-button mobile-only" aria-label="Chiudi menu">×</button>
       </div>
       <button id="home-button" class="nav-item active"><span class="nav-icon">⌂</span> Tutti i file</button>
-      <div class="sidebar-heading"><span>CARTELLE</span><button id="sidebar-new-folder" class="subtle-icon" title="Nuova cartella" aria-label="Nuova cartella">＋</button></div>
+      <div class="sidebar-heading"><span>CARTELLE</span><div class="sidebar-heading-actions"><button id="collapse-folders" class="subtle-icon collapse-icon" title="Chiudi tutte le cartelle" aria-label="Chiudi tutte le cartelle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 4h12M4 8h12M4 12h12M7 17l3-3 3 3"/></svg></button><button id="sidebar-new-folder" class="subtle-icon" title="Nuova cartella" aria-label="Nuova cartella">＋</button></div></div>
       <nav id="folder-tree" class="folder-tree" aria-label="Cartelle"></nav>
       <div class="sidebar-bottom"><button id="trash-button" class="nav-item"><span class="nav-icon">♻</span> Cestino</button><button id="backups-button" class="nav-item"><span class="nav-icon">◷</span> Backup</button><button id="logout-button" class="nav-item"><span class="nav-icon">↪</span> Esci</button></div>
     </aside>
@@ -60,6 +60,7 @@
   <dialog id="dialog" class="dialog"><form id="dialog-form" method="dialog"><div class="dialog-heading"><div><div id="dialog-eyebrow" class="eyebrow">AZIONE</div><h2 id="dialog-title"></h2></div><button id="dialog-close" type="button" class="icon-button" aria-label="Chiudi">×</button></div><p id="dialog-description"></p><div id="dialog-fields"></div><div class="dialog-actions"><button id="dialog-cancel" class="button secondary" type="button">Annulla</button><button id="dialog-submit" class="button primary" type="submit">Conferma</button></div></form></dialog>
   <dialog id="history-dialog" class="dialog wide"><div class="dialog-heading"><div><div class="eyebrow">RECUPERO</div><h2>Cronologia versioni</h2></div><button id="history-close" class="icon-button" aria-label="Chiudi">×</button></div><div id="history-list" class="history-list"></div><pre id="history-preview" class="history-preview"></pre><div class="dialog-actions"><button id="history-restore" class="button primary" disabled>Ripristina questa versione</button></div></dialog>
   <dialog id="backup-dialog" class="dialog wide"><div class="dialog-heading"><div><div class="eyebrow">SICUREZZA</div><h2>Backup dell’archivio</h2></div><button id="backup-close" class="icon-button" aria-label="Chiudi">×</button></div><p>Una copia automatica al giorno, conservata fuori dalla cartella dei file.</p><div id="backup-details" class="backup-details"></div><div class="dialog-actions"><button id="backup-now" class="button primary">Crea backup ora</button></div></dialog>
+  <div id="context-menu" class="context-menu hidden" role="menu" aria-label="Azioni elemento"></div>
   <div id="drop-overlay" class="drop-overlay hidden"><div>↓<strong>Rilascia per caricare i file</strong><span>nella cartella corrente</span></div></div>
 </body>
 </html>

@@ -2,7 +2,8 @@ import { renderMarkdown, parseProperties, updateProperties, fillTemplate } from 
 
 const $ = id => document.getElementById(id);
 const state = { folder: '', file: null, content: '', saved: '', modifiedAt: '', folders: [], search: '', editing: false, view: 'files', noticeTimer: null, selectedVersion: null };
-const els = Object.fromEntries(['login','app','login-form','login-error','password','items','empty','search-empty','folder-tree','breadcrumbs','page-title','page-subtitle','browser-view','trash-view','trash-items','trash-empty','file-view','file-title','file-location','file-meta','preview','editor','binary-preview','editor-controls','preview-tab','edit-tab','save-button','dirty-indicator','search','upload-input','dialog','dialog-form','dialog-title','dialog-description','dialog-fields','dialog-submit','dialog-eyebrow','notice','drop-overlay','sidebar','properties-panel','properties-list','format-toolbar','links-panel','outbound-links','backlinks','history-dialog','history-list','history-preview','history-restore','backup-dialog','backup-details'].map(id => [id,$(id)]));
+const els = Object.fromEntries(['login','app','login-form','login-error','password','items','empty','search-empty','folder-tree','context-menu','breadcrumbs','page-title','page-subtitle','browser-view','trash-view','trash-items','trash-empty','file-view','file-title','file-location','file-meta','preview','editor','binary-preview','editor-controls','preview-tab','edit-tab','save-button','dirty-indicator','search','upload-input','dialog','dialog-form','dialog-title','dialog-description','dialog-fields','dialog-submit','dialog-eyebrow','notice','drop-overlay','sidebar','properties-panel','properties-list','format-toolbar','links-panel','outbound-links','backlinks','history-dialog','history-list','history-preview','history-restore','backup-dialog','backup-details'].map(id => [id,$(id)]));
+const collapsedFolders = new Set();
 
 async function api(path, options = {}) {
   const res = await fetch(path, { credentials: 'same-origin', ...options, headers: { ...(options.body && !(options.body instanceof Blob) ? { 'Content-Type': 'application/json' } : {}), ...options.headers } });
@@ -31,21 +32,33 @@ function dirty() { return state.file && state.content !== state.saved; }
 function updateDirty() { els['save-button'].disabled = !dirty(); els['dirty-indicator'].textContent = dirty() ? 'Modifiche non salvate' : 'Tutte le modifiche salvate'; }
 function confirmLeave() { return !dirty() || confirm('Ci sono modifiche non salvate. Vuoi uscire senza salvarle?'); }
 
-async function refreshTree() {
-  state.folders = (await api('/api/tree')).folders;
+function renderTree() {
   els['folder-tree'].replaceChildren();
   const add = (nodes, depth) => nodes.forEach(node => {
-    const row = document.createElement('button'); row.type = 'button'; row.className = 'tree-row' + (state.folder === node.path ? ' active' : ''); row.style.paddingLeft = `${8 + depth * 13}px`;
-    const chevron = document.createElement('span'); chevron.className = 'chevron'; chevron.textContent = node.children.length ? '⌄' : '';
+    const row = document.createElement('div'); row.className = 'tree-row' + (state.folder === node.path ? ' active' : ''); row.style.paddingLeft = `${8 + depth * 13}px`;
+    const toggle = document.createElement(node.children.length ? 'button' : 'span'); toggle.className = 'tree-toggle';
+    if (node.children.length) {
+      toggle.type = 'button'; toggle.textContent = collapsedFolders.has(node.path) ? '▸' : '▾';
+      toggle.setAttribute('aria-label', `${collapsedFolders.has(node.path) ? 'Apri' : 'Chiudi'} ${node.name}`);
+      toggle.setAttribute('aria-expanded', String(!collapsedFolders.has(node.path)));
+      toggle.onclick = () => { if (collapsedFolders.has(node.path)) collapsedFolders.delete(node.path); else collapsedFolders.add(node.path); renderTree(); };
+    } else toggle.setAttribute('aria-hidden', 'true');
+    const folder = document.createElement('button'); folder.type = 'button'; folder.className = 'tree-folder'; folder.onclick = () => navigate(node.path).catch(handle);
     const glyph = document.createElement('span'); glyph.className = 'folder-glyph'; glyph.textContent = '▰';
     const label = document.createElement('span'); label.textContent = node.name;
-    row.append(chevron, glyph, label); row.onclick = () => navigate(node.path);
+    folder.append(glyph, label); row.append(toggle, folder);
+    row.oncontextmenu = e => { e.preventDefault(); showContextMenu({ path: node.path, name: node.name, type: 'folder' }, e.clientX, e.clientY); };
     row.ondragover = e => { if (e.dataTransfer.types.includes('text/plain')) e.preventDefault(); };
-    row.ondrop = e => { e.preventDefault(); const from = e.dataTransfer.getData('text/plain'); if (from) moveEntry(from, node.path); };
-    els['folder-tree'].append(row); add(node.children, depth + 1);
+    row.ondrop = e => { e.preventDefault(); const from = e.dataTransfer.getData('text/plain'); if (from) moveEntry(from, node.path).catch(handle); };
+    els['folder-tree'].append(row); if (!collapsedFolders.has(node.path)) add(node.children, depth + 1);
   });
   add(state.folders, 0);
   $('home-button').classList.toggle('active', !state.folder);
+}
+async function refreshTree() { state.folders = (await api('/api/tree')).folders; renderTree(); }
+function collapseAllFolders() {
+  const collect = nodes => nodes.forEach(node => { if (node.children.length) collapsedFolders.add(node.path); collect(node.children); });
+  collect(state.folders); renderTree();
 }
 function renderBreadcrumbs() {
   els.breadcrumbs.replaceChildren();
@@ -62,6 +75,7 @@ function showTrash() { state.view = 'trash'; els['browser-view'].classList.add('
 async function navigate(folder = '') {
   if (!confirmLeave()) return;
   state.file = null; state.folder = folder; state.search = ''; els.search.value = '';
+  for (let path = parent(folder); path; path = parent(path)) collapsedFolders.delete(path);
   showBrowser(); renderBreadcrumbs();
   els['page-title'].textContent = pathName(folder);
   els['page-subtitle'].textContent = folder ? `Cartella · ${folder}` : 'Un posto per ogni idea.';
@@ -86,13 +100,14 @@ function renderItems(items, searching = false) {
     const date = document.createElement('span'); date.className = 'item-date'; date.textContent = formatDate(entry.modifiedAt);
     const size = document.createElement('span'); size.className = 'item-size'; size.textContent = entry.type === 'folder' ? '—' : formatSize(entry.size);
     const more = document.createElement('button'); more.className = 'item-more'; more.type = 'button'; more.title = 'Azioni'; more.setAttribute('aria-label', `Azioni per ${entry.name}`); more.textContent = '···';
-    more.onclick = e => { e.stopPropagation(); actions(entry); };
+    more.onclick = e => { e.stopPropagation(); const rect = more.getBoundingClientRect(); showContextMenu(entry, rect.left, rect.bottom + 4); };
     row.append(name, date, size, more); row.onclick = () => entry.type === 'folder' ? navigate(entry.path) : openFile(entry);
-    row.onkeydown = e => { if (e.key === 'Enter') row.click(); };
+    row.oncontextmenu = e => { e.preventDefault(); showContextMenu(entry, e.clientX, e.clientY); };
+    row.onkeydown = e => { if (e.target === row && e.key === 'Enter') row.click(); };
     row.ondragstart = e => e.dataTransfer.setData('text/plain', entry.path);
     if (entry.type === 'folder') {
       row.ondragover = e => e.preventDefault();
-      row.ondrop = e => { e.preventDefault(); e.stopPropagation(); const from = e.dataTransfer.getData('text/plain'); if (from) moveEntry(from, entry.path); };
+      row.ondrop = e => { e.preventDefault(); e.stopPropagation(); const from = e.dataTransfer.getData('text/plain'); if (from) moveEntry(from, entry.path).catch(handle); };
     }
     els.items.append(row);
   }
@@ -101,6 +116,8 @@ async function openFile(entry) {
   if (!confirmLeave()) return;
   const file = await api(`/api/file?path=${encodeURIComponent(entry.path)}`);
   state.file = entry.path; state.folder = parent(entry.path); state.saved = file.content || ''; state.content = state.saved; state.modifiedAt = file.modifiedAt || ''; state.editing = false;
+  for (let path = state.folder; path; path = parent(path)) collapsedFolders.delete(path);
+  renderTree(); renderBreadcrumbs();
   els['file-title'].textContent = entry.name; els['file-location'].textContent = state.folder ? state.folder.toUpperCase() : 'ARCHIVIO';
   els['file-meta'].textContent = `${formatSize(entry.size)} · ${formatDate(entry.modifiedAt)}`;
   els.editor.value = state.content; updatePreview();
@@ -122,7 +139,7 @@ async function openFile(entry) {
       const frame = document.createElement('iframe'); frame.src = `/api/raw?path=${encodeURIComponent(entry.path)}`; frame.title = entry.name; els['binary-preview'].append(frame);
     } else { const p = document.createElement('p'); p.textContent = 'Questo file non ha un’anteprima. Puoi scaricarlo e aprirlo sul tuo dispositivo.'; els['binary-preview'].append(p); }
   }
-  selectTab(false); updateDirty(); showFile();
+  selectTab(false); updateDirty(); showFile(); els.sidebar.classList.remove('open');
 }
 function selectTab(edit) {
   state.editing = edit; els.preview.classList.toggle('hidden', edit || els['editor-controls'].classList.contains('hidden'));
@@ -187,24 +204,56 @@ function validateName(name) {
   return trimmed;
 }
 function allFolders(nodes, output = [{ value: '', label: 'Tutti i file (radice)' }], depth = 0) { nodes.forEach(n => { output.push({ value: n.path, label: `${'　'.repeat(depth)}${n.name}` }); allFolders(n.children, output, depth + 1); }); return output; }
-function newFolder() { dialog({ eyebrow: 'ORGANIZZA', title: 'Nuova cartella', description: `Verrà creata in “${pathName(state.folder)}”.`, fields: [{ name: 'name', label: 'Nome della cartella', placeholder: 'Es. Progetti' }], submit: 'Crea cartella', onSubmit: async ({ name }) => { await json('POST', '/api/folders', { path: join(state.folder, validateName(name)) }); await refreshTree(); await loadItems(); notice('Cartella creata'); } }); }
-async function newNote() { try { const { templates } = await api('/api/templates'); dialog({ eyebrow: 'SCRIVI', title: 'Nuova nota', description: `Verrà creata in “${pathName(state.folder)}”.`, fields: [{ name: 'name', label: 'Nome della nota', placeholder: 'Es. Una nuova idea' }, { name: 'template', label: 'Modello', options: templates.map(t => ({ value: t.id, label: t.name })) }], submit: 'Crea nota', onSubmit: async ({ name, template }) => { const title = validateName(name); const filename = /\.md$/i.test(title) ? title : `${title}.md`; const path = join(state.folder, filename); const selected = templates.find(t => t.id === template) || templates[0]; const content = fillTemplate(selected.content, title.replace(/\.md$/i, ''), new Intl.DateTimeFormat('sv-SE').format(new Date())); const created = await json('POST', '/api/files', { path, content }); await loadItems(); await openFile({ name: filename, path, size: created.size, modifiedAt: created.modifiedAt }); selectTab(true); notice('Nota creata'); } }); } catch (e) { handle(e); } }
+function newFolder(destination = state.folder) { dialog({ eyebrow: 'ORGANIZZA', title: 'Nuova cartella', description: `Verrà creata in “${pathName(destination)}”.`, fields: [{ name: 'name', label: 'Nome della cartella', placeholder: 'Es. Progetti' }], submit: 'Crea cartella', onSubmit: async ({ name }) => { await json('POST', '/api/folders', { path: join(destination, validateName(name)) }); collapsedFolders.delete(destination); await refreshTree(); if (state.view === 'files') await loadItems(); notice('Cartella creata'); } }); }
+async function newNote(destination = state.folder) { try { const { templates } = await api('/api/templates'); dialog({ eyebrow: 'SCRIVI', title: 'Nuova nota', description: `Verrà creata in “${pathName(destination)}”.`, fields: [{ name: 'name', label: 'Nome della nota', placeholder: 'Es. Una nuova idea' }, { name: 'template', label: 'Modello', options: templates.map(t => ({ value: t.id, label: t.name })) }], submit: 'Crea nota', onSubmit: async ({ name, template }) => { const title = validateName(name); const filename = /\.md$/i.test(title) ? title : `${title}.md`; const path = join(destination, filename); const selected = templates.find(t => t.id === template) || templates[0]; const content = fillTemplate(selected.content, title.replace(/\.md$/i, ''), new Intl.DateTimeFormat('sv-SE').format(new Date())); const created = await json('POST', '/api/files', { path, content }); if (state.view === 'files') await loadItems(); await openFile({ name: filename, path, size: created.size, modifiedAt: created.modifiedAt }); selectTab(true); notice('Nota creata'); } }); } catch (e) { handle(e); } }
 function newMenu() { dialog({ eyebrow: 'CREA', title: 'Aggiungi al tuo archivio', description: 'Scegli cosa vuoi creare nella cartella corrente.', submit: 'Crea', fields: [{ name: 'type', label: 'Tipo', options: [{ value: 'note', label: 'Nota Markdown' }, { value: 'folder', label: 'Cartella' }] }], onSubmit: async ({ type }) => { setTimeout(() => type === 'folder' ? newFolder() : newNote(), 0); } }); }
+function rebasePath(path, from, to) { return path === from ? to : path?.startsWith(from + '/') ? to + path.slice(from.length) : path; }
+function relocateView(from, to) {
+  const previousFile = state.file;
+  const nextFolder = rebasePath(state.folder, from, to);
+  const nextFile = rebasePath(state.file, from, to);
+  state.folder = nextFolder; state.file = nextFile;
+  if (state.view === 'file' && nextFile !== previousFile) state.folder = parent(nextFile);
+  for (const path of [...collapsedFolders]) if (path === from || path.startsWith(from + '/')) { collapsedFolders.delete(path); collapsedFolders.add(rebasePath(path, from, to)); }
+  renderBreadcrumbs();
+  if (state.view === 'files' && !state.search) { els['page-title'].textContent = pathName(state.folder); els['page-subtitle'].textContent = state.folder ? `Cartella · ${state.folder}` : 'Un posto per ogni idea.'; }
+  if (state.view === 'file' && state.file) { els['file-title'].textContent = pathName(state.file); els['file-location'].textContent = state.folder ? state.folder.toUpperCase() : 'ARCHIVIO'; }
+}
 async function renameEntry(entry) {
-  dialog({ eyebrow: 'ORGANIZZA', title: 'Rinomina', fields: [{ name: 'name', label: 'Nuovo nome', value: entry.name }], submit: 'Rinomina', onSubmit: async ({ name }) => { const to = join(parent(entry.path), validateName(name)); await json('POST', '/api/move', { from: entry.path, to }); if (state.file === entry.path) { state.file = to; els['file-title'].textContent = pathName(to); } await refreshTree(); if (!els['browser-view'].classList.contains('hidden')) await loadItems(); notice('Nome aggiornato'); } });
+  dialog({ eyebrow: 'ORGANIZZA', title: 'Rinomina', fields: [{ name: 'name', label: 'Nuovo nome', value: entry.name }], submit: 'Rinomina', onSubmit: async ({ name }) => { const to = join(parent(entry.path), validateName(name)); if (to === entry.path) return; await json('POST', '/api/move', { from: entry.path, to }); relocateView(entry.path, to); await refreshTree(); if (state.view === 'files') await loadItems(); notice('Nome aggiornato'); } });
 }
 async function moveEntry(from, destination) {
-  if (from === destination || destination.startsWith(from + '/')) return handle(new Error('Non puoi spostare una cartella dentro sé stessa.'));
+  if (from === destination || destination.startsWith(from + '/')) throw new Error('Non puoi spostare una cartella dentro sé stessa.');
   const to = join(destination, pathName(from));
   if (from === to) return;
-  try { await json('POST', '/api/move', { from, to }); if (state.file === from) { state.file = to; state.folder = destination; } await refreshTree(); await loadItems(); notice('Elemento spostato'); }
-  catch (err) { handle(err); }
+  await json('POST', '/api/move', { from, to }); relocateView(from, to); await refreshTree(); if (state.view === 'files') await loadItems(); notice('Elemento spostato');
 }
-function moveDialog(entry) { dialog({ eyebrow: 'ORGANIZZA', title: 'Sposta elemento', description: `Sposta “${entry.name}” in un’altra cartella.`, fields: [{ name: 'destination', label: 'Destinazione', options: allFolders(state.folders).filter(o => o.value !== entry.path && !o.value.startsWith(entry.path + '/')) }], submit: 'Sposta', onSubmit: async ({ destination }) => { await moveEntry(entry.path, destination); } }); }
-function deleteEntry(entry) { if (state.file === entry.path && !confirmLeave()) return; dialog({ eyebrow: 'RECUPERO', title: 'Sposta nel cestino', description: `Spostare “${entry.name}”${entry.type === 'folder' ? ' e il suo contenuto' : ''} nel cestino? Potrai ripristinarlo in seguito.`, submit: 'Sposta nel cestino', onSubmit: async () => { await json('DELETE', '/api/items', { path: entry.path }); if (state.file === entry.path) { state.file = null; showBrowser(); } await refreshTree(); await loadItems(); notice('Elemento spostato nel cestino'); } }); }
-function actions(entry) {
-  const choices = [{ value: 'rename', label: 'Rinomina' }, { value: 'move', label: 'Sposta' }, ...(entry.type === 'file' ? [{ value: 'download', label: 'Scarica' }] : []), { value: 'delete', label: 'Elimina' }];
-  dialog({ eyebrow: 'GESTISCI', title: entry.name, fields: [{ name: 'action', label: 'Azione', options: choices }], submit: 'Continua', onSubmit: async ({ action }) => { setTimeout(() => { if (action === 'rename') renameEntry(entry); else if (action === 'move') moveDialog(entry); else if (action === 'delete') deleteEntry(entry); else download(entry.path); }, 0); } });
+function moveDialog(entry) { dialog({ eyebrow: 'ORGANIZZA', title: 'Sposta elemento', description: `Sposta “${entry.name}” in un’altra cartella.`, fields: [{ name: 'destination', label: 'Destinazione', required: false, options: allFolders(state.folders).filter(o => o.value !== entry.path && !o.value.startsWith(entry.path + '/')) }], submit: 'Sposta', onSubmit: async ({ destination }) => { await moveEntry(entry.path, destination); } }); }
+function deleteEntry(entry) { if (state.file && (state.file === entry.path || state.file.startsWith(entry.path + '/')) && !confirmLeave()) return; dialog({ eyebrow: 'RECUPERO', title: 'Sposta nel cestino', description: `Spostare “${entry.name}”${entry.type === 'folder' ? ' e il suo contenuto' : ''} nel cestino? Potrai ripristinarlo in seguito.`, submit: 'Sposta nel cestino', onSubmit: async () => { await json('DELETE', '/api/items', { path: entry.path }); if (state.file && (state.file === entry.path || state.file.startsWith(entry.path + '/'))) { state.file = null; showBrowser(); } if (state.folder === entry.path || state.folder.startsWith(entry.path + '/')) state.folder = parent(entry.path); renderBreadcrumbs(); els['page-title'].textContent = pathName(state.folder); els['page-subtitle'].textContent = state.folder ? `Cartella · ${state.folder}` : 'Un posto per ogni idea.'; await refreshTree(); if (state.view === 'files') await loadItems(); notice('Elemento spostato nel cestino'); } }); }
+function closeContextMenu() { els['context-menu'].classList.add('hidden'); els['context-menu'].replaceChildren(); }
+function showContextMenu(entry, x, y) {
+  closeContextMenu();
+  const options = [
+    { label: 'Apri', action: () => entry.type === 'folder' ? navigate(entry.path) : openFile(entry) },
+    ...(entry.type === 'folder' ? [
+      { label: 'Nuova nota qui', action: () => newNote(entry.path) },
+      { label: 'Nuova sottocartella', action: () => newFolder(entry.path) }
+    ] : [{ label: 'Scarica', action: () => download(entry.path) }]),
+    { label: 'Rinomina', action: () => renameEntry(entry) },
+    { label: 'Sposta', action: () => moveDialog(entry) },
+    { label: 'Sposta nel cestino', danger: true, action: () => deleteEntry(entry) }
+  ];
+  for (const option of options) {
+    const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem'; button.textContent = option.label;
+    if (option.danger) button.classList.add('danger-text');
+    button.onclick = () => { closeContextMenu(); Promise.resolve(option.action()).catch(handle); };
+    els['context-menu'].append(button);
+  }
+  els['context-menu'].classList.remove('hidden');
+  const bounds = els['context-menu'].getBoundingClientRect();
+  els['context-menu'].style.left = `${Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8))}px`;
+  els['context-menu'].style.top = `${Math.max(8, Math.min(y, window.innerHeight - bounds.height - 8))}px`;
+  els['context-menu'].querySelector('button')?.focus();
 }
 function download(path) { const a = document.createElement('a'); a.href = `/api/file?path=${encodeURIComponent(path)}&download=1`; a.download = pathName(path); document.body.append(a); a.click(); a.remove(); }
 async function upload(files) {
@@ -293,8 +342,8 @@ async function attachFiles(files) {
 
 els['login-form'].onsubmit = async e => { e.preventDefault(); try { await json('POST', '/api/login', { password: els.password.value }); els.password.value = ''; els['login-error'].textContent = ''; showApp(); await navigate(''); } catch (err) { els['login-error'].textContent = err.message; } };
 $('logout-button').onclick = async () => { if (!confirmLeave()) return; await api('/api/logout', { method: 'POST' }); state.file = null; showLogin(); };
-$('home-button').onclick = () => navigate(''); $('sidebar-new-folder').onclick = newFolder; $('new-button').onclick = newMenu; $('empty-new').onclick = newNote;
-$('subfolder-button').onclick = newFolder;
+$('home-button').onclick = () => navigate(''); $('sidebar-new-folder').onclick = () => newFolder(); $('collapse-folders').onclick = collapseAllFolders; $('new-button').onclick = newMenu; $('empty-new').onclick = () => newNote();
+$('subfolder-button').onclick = () => newFolder();
 $('trash-button').onclick = () => showTrashPage().catch(handle); $('backups-button').onclick = openBackups;
 $('backup-close').onclick = () => els['backup-dialog'].close(); $('backup-now').onclick = async () => { try { $('backup-now').disabled = true; await json('POST', '/api/backups', {}); els['backup-dialog'].close(); await openBackups(); notice('Backup creato'); } catch (e) { handle(e); } finally { $('backup-now').disabled = false; } };
 $('history-close').onclick = () => els['history-dialog'].close(); $('history-file').onclick = openHistory;
@@ -313,6 +362,9 @@ $('move-file').onclick = () => moveDialog({ path: state.file, name: pathName(sta
 $('download-file').onclick = () => download(state.file); $('delete-file').onclick = () => deleteEntry({ path: state.file, name: pathName(state.file), type: 'file' });
 let searchTimer; els.search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(async () => { const query = els.search.value.trim(); if (query.length === 1) return; if (state.file && !confirmLeave()) { els.search.value = state.search; return; } state.file = null; state.search = query; showBrowser(); if (!state.search) { els['page-title'].textContent = pathName(state.folder); els['page-subtitle'].textContent = state.folder ? `Cartella · ${state.folder}` : 'Un posto per ogni idea.'; } try { await loadItems(); } catch (e) { handle(e); } }, 250); };
 document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); els.search.focus(); } if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save().catch(handle); } if ((e.metaKey || e.ctrlKey) && state.editing && document.activeElement === els.editor && ['b', 'i'].includes(e.key.toLowerCase())) { e.preventDefault(); formatSelection(e.key.toLowerCase() === 'b' ? 'bold' : 'italic'); } });
+document.addEventListener('pointerdown', e => { if (!els['context-menu'].contains(e.target)) closeContextMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeContextMenu(); });
+document.addEventListener('scroll', closeContextMenu, true);
 window.addEventListener('beforeunload', e => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
 $('dialog-close').onclick = () => els.dialog.close(); $('dialog-cancel').onclick = () => els.dialog.close();
 $('menu-button').onclick = () => els.sidebar.classList.add('open'); $('sidebar-close').onclick = () => els.sidebar.classList.remove('open');
