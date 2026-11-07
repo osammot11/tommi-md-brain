@@ -429,7 +429,7 @@ async function api(req, res, url) {
 }
 async function staticFile(req, res, url) {
   if (!['GET', 'HEAD'].includes(req.method)) throw error(405, 'Metodo non consentito');
-  const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/markdown.js': ['markdown.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'] };
+  const assets = { '/': ['index.html', 'text/html; charset=utf-8'], '/app.js': ['app.js', 'text/javascript; charset=utf-8'], '/upload.js': ['upload.js', 'text/javascript; charset=utf-8'], '/markdown.js': ['markdown.js', 'text/javascript; charset=utf-8'], '/style.css': ['style.css', 'text/css; charset=utf-8'] };
   const asset = assets[url.pathname];
   if (!asset) throw error(404, 'Pagina non trovata');
   const body = await fs.readFile(join(here, 'public', asset[0]));

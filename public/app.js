@@ -1,3 +1,4 @@
+import { uploadFiles } from './upload.js';
 import { renderMarkdown, parseProperties, updateProperties, fillTemplate } from './markdown.js';
 
 const $ = id => document.getElementById(id);
@@ -256,16 +257,19 @@ function showContextMenu(entry, x, y) {
   els['context-menu'].querySelector('button')?.focus();
 }
 function download(path) { const a = document.createElement('a'); a.href = `/api/file?path=${encodeURIComponent(path)}&download=1`; a.download = pathName(path); document.body.append(a); a.click(); a.remove(); }
+let uploading = false;
 async function upload(files) {
-  for (const file of files) {
-    try {
-      const name = validateName(file.name);
-      const path = join(state.folder, name);
-      await api(`/api/upload?path=${encodeURIComponent(path)}`, { method: 'POST', body: file, headers: { 'Content-Type': 'application/octet-stream' } });
-      notice(`Caricato: ${name}`);
-    } catch (err) { handle(err); }
-  }
-  await loadItems();
+  if (!files.length) return notice('Nessun file selezionato. Le cartelle vuote non vengono importate.');
+  if (uploading) return notice('Attendi il completamento del caricamento in corso.');
+  uploading = true;
+  const destination = state.folder;
+  $('upload-button').disabled = true; $('upload-folder-button').disabled = true;
+  try {
+    const result = await uploadFiles(files, destination, { api, onProgress: (done, total) => notice(`Caricamento: ${done}/${total} file`) });
+    await refreshTree(); if (state.view === 'files') await loadItems();
+    notice(`Caricati ${result.uploaded} file${result.skipped ? ` · ${result.skipped} file nascosti ignorati` : ''}${result.errors.length ? ` · ${result.errors.length} non caricati. ${result.errors[0]}` : ''}`, result.errors.length > 0);
+  } catch (error) { handle(error); }
+  finally { uploading = false; $('upload-button').disabled = false; $('upload-folder-button').disabled = false; }
 }
 async function showTrashPage() {
   if (!confirmLeave()) return;
@@ -350,6 +354,7 @@ $('history-close').onclick = () => els['history-dialog'].close(); $('history-fil
 els['history-restore'].onclick = async () => { if (!state.selectedVersion || !confirmLeave()) return; try { const path = state.file; await json('POST', '/api/versions/restore', { id: state.selectedVersion }); els['history-dialog'].close(); state.saved = state.content; const items = (await api(`/api/items?path=${encodeURIComponent(parent(path))}`)).items; await openFile(items.find(item => item.path === path)); notice('Versione ripristinata'); } catch (e) { handle(e); } };
 $('edit-properties').onclick = editProperties;
 $('template-file').onclick = () => dialog({ eyebrow: 'MODELLI', title: 'Salva come modello', description: 'Il contenuto della nota sarà disponibile quando crei nuove note. Puoi usare {{title}} e {{date}} come segnaposto.', fields: [{ name: 'name', label: 'Nome del modello', value: pathName(state.file).replace(/\.md$/i, '') }], submit: 'Salva modello', onSubmit: async ({ name }) => { await json('POST', '/api/templates', { name: validateName(name), content: state.content }); notice('Modello salvato'); } });
+$('upload-folder-button').onclick = () => $('upload-folder-input').click(); $('upload-folder-input').onchange = () => { upload([...$('upload-folder-input').files]); $('upload-folder-input').value = ''; };
 $('upload-button').onclick = () => els['upload-input'].click(); els['upload-input'].onchange = () => { upload([...els['upload-input'].files]); els['upload-input'].value = ''; };
 $('back-button').onclick = () => navigate(state.folder); $('preview-tab').onclick = () => selectTab(false); $('edit-tab').onclick = () => selectTab(true);
 els.editor.oninput = () => { state.content = els.editor.value; updateDirty(); }; $('save-button').onclick = () => save().catch(handle);
@@ -368,6 +373,6 @@ document.addEventListener('scroll', closeContextMenu, true);
 window.addEventListener('beforeunload', e => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
 $('dialog-close').onclick = () => els.dialog.close(); $('dialog-cancel').onclick = () => els.dialog.close();
 $('menu-button').onclick = () => els.sidebar.classList.add('open'); $('sidebar-close').onclick = () => els.sidebar.classList.remove('open');
-let dragDepth = 0; document.ondragenter = e => { if ([...e.dataTransfer.types].includes('Files')) { dragDepth++; els['drop-overlay'].classList.remove('hidden'); } }; document.ondragleave = e => { if ([...e.dataTransfer.types].includes('Files') && --dragDepth <= 0) { dragDepth = 0; els['drop-overlay'].classList.add('hidden'); } }; document.ondragover = e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); }; document.ondrop = e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); dragDepth = 0; els['drop-overlay'].classList.add('hidden'); upload([...e.dataTransfer.files]); } };
+let dragDepth = 0; document.ondragenter = e => { if ([...e.dataTransfer.types].includes('Files')) { dragDepth++; els['drop-overlay'].classList.remove('hidden'); } }; document.ondragleave = e => { if ([...e.dataTransfer.types].includes('Files') && --dragDepth <= 0) { dragDepth = 0; els['drop-overlay'].classList.add('hidden'); } }; document.ondragover = e => { if ([...e.dataTransfer.types].includes('Files')) e.preventDefault(); }; document.ondrop = e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); dragDepth = 0; els['drop-overlay'].classList.add('hidden'); if ([...e.dataTransfer.items].some(item => item.webkitGetAsEntry?.()?.isDirectory)) notice('Per importare una cartella usa il pulsante Carica cartella.', true); else upload([...e.dataTransfer.files]); } };
 
 api('/api/session').then(({ authenticated }) => authenticated ? (showApp(), navigate('')) : showLogin()).catch(handle);

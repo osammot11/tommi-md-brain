@@ -16,6 +16,8 @@ Un archivio personale self-hosted per cartelle, note Markdown e allegati. I dati
 
 Per creare una sottocartella, apri la cartella padre e premi **Sottocartella**. Puoi ripetere l’operazione a qualsiasi livello; le sottocartelle appaiono anche nell’albero laterale. Il click destro su un file o una cartella apre le azioni contestuali; il pulsante accanto a **CARTELLE** chiude tutti i rami dell’albero e i triangoli aprono o chiudono i singoli rami. Su dispositivi touch puoi usare il pulsante `···` nell’elenco dei file.
 
+Usa **Carica cartella** per importare una cartella con i suoi file e sottocartelle nella posizione corrente. Le cartelle esistenti vengono unite e i file già presenti non vengono sovrascritti. Il limite resta 25 MB per file. Il selettore del browser non include le cartelle vuote; i file e le cartelle nascosti vengono ignorati.
+
 ## Avvio locale
 
 Richiede Node.js 22 o superiore. Non ci sono dipendenze npm da installare.
