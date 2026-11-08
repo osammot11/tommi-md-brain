@@ -33,8 +33,8 @@ test('MCP e OAuth proteggono note e scritture', async () => {
   };
   const verifier = 'v'.repeat(64);
   const challenge = createHash('sha256').update(verifier).digest('base64url');
-  const clientId = 'https://chatgpt.com/oauth/client.json';
-  const redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
+  let clientId = 'https://chatgpt.com/oauth/client.json';
+  let redirect = 'https://chatgpt.com/connector_platform_oauth_redirect';
   const authorize = async scope => {
     const query = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope, state: 'test-state' });
     const page = await fetch(`${base}/oauth/authorize?${query}`);
@@ -46,7 +46,7 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     const grant = await fetch(`${base}/oauth/authorize`, { method: 'POST', body: new URLSearchParams({ request_id: requestId, password: 'test-password' }), redirect: 'manual' });
     assert.equal(grant.status, 302);
     const location = new URL(grant.headers.get('location'));
-    assert.equal(location.origin, 'https://chatgpt.com');
+    assert.equal(location.origin + location.pathname, redirect);
     assert.equal(location.searchParams.get('iss'), base);
     assert.equal(location.searchParams.get('state'), 'test-state');
     return location.searchParams.get('code');
@@ -65,10 +65,11 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal(resource.resource, `${base}/mcp`);
     const metadata = await (await fetch(`${base}/.well-known/oauth-authorization-server`)).json();
     assert.deepEqual(metadata.code_challenge_methods_supported, ['S256']);
-    const initialized = await mcp('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } });
+    const discoveryBearer = (await exchange(await authorize('brain.read brain.write'))).data.access_token;
+    const initialized = await mcp('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1.0.0' } }, discoveryBearer);
     assert.equal(initialized.status, 200);
     assert.equal(initialized.data.result.serverInfo.name, 'tommi-brain');
-    const listed = await mcp('tools/list');
+    const listed = await mcp('tools/list', {}, discoveryBearer);
     assert.equal(listed.status, 200);
     assert.ok(listed.data.result.tools.some(tool => tool.name === 'create_note'));
     assert.deepEqual(listed.data.result.tools.find(tool => tool.name === 'create_note').securitySchemes, [{ type: 'oauth2', scopes: ['brain.write'] }]);
@@ -77,8 +78,10 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal(listed.data.result.tools.find(tool => tool.name === 'get_profile')._meta['openai/profile'], true);
     assert.ok(listed.data.result.tools.find(tool => tool.name === 'get_profile').outputSchema);
     const unauth = await mcp('tools/call', { name: 'list_items', arguments: { path: '' } });
-    assert.equal(unauth.data.result.isError, true);
-    assert.ok(unauth.data.result._meta['mcp/www_authenticate']);
+    assert.equal(unauth.status, 401);
+    const unauthGet = await fetch(`${base}/mcp`);
+    assert.equal(unauthGet.status, 401);
+    assert.match(unauthGet.headers.get('www-authenticate'), /resource_metadata=/);
     const badClient = new URLSearchParams({ response_type: 'code', client_id: 'attacker', redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope: 'brain.read' });
     assert.equal((await fetch(`${base}/oauth/authorize?${badClient}`)).status, 400);
     const badScope = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope: 'brain.admin', state: 'invalid-scope-state' });
@@ -91,7 +94,7 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     const staleGrant = await fetch(`${base}/oauth/authorize`, { method: 'POST', body: new URLSearchParams({ request_id: 'missing', password: 'test-password' }) });
     assert.equal(staleGrant.status, 400);
     assert.match(staleGrant.headers.get('content-type'), /text\/html/);
-    assert.match(await staleGrant.text(), /avvia di nuovo il collegamento da ChatGPT/);
+    assert.match(await staleGrant.text(), /avvia di nuovo il collegamento dal client di origine/);
 
     const restartQuery = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope: 'brain.read', state: 'restart-state' });
     const restartPage = await fetch(`${base}/oauth/authorize?${restartQuery}`);
@@ -148,10 +151,41 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     const parts = bearer.split('.');
     parts[2] = `${parts[2][0] === 'A' ? 'B' : 'A'}${parts[2].slice(1)}`;
     const tampered = parts.join('.');
-    assert.equal((await mcp('tools/call', { name: 'list_items', arguments: { path: '' } }, tampered)).data.result.isError, true);
+    assert.equal((await mcp('tools/call', { name: 'list_items', arguments: { path: '' } }, tampered)).status, 401);
     const refreshed = await fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, resource: `${base}/mcp`, refresh_token: writeToken.data.refresh_token }) });
     assert.equal(refreshed.status, 200);
-    assert.ok((await refreshed.json()).access_token);
+    const rotated = await refreshed.json();
+    assert.ok(rotated.access_token);
+    assert.notEqual(rotated.refresh_token, writeToken.data.refresh_token);
+    const refreshToken = async (value, client = clientId) => fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'refresh_token', client_id: client, resource: `${base}/mcp`, refresh_token: value }) });
+    assert.equal((await refreshToken(writeToken.data.refresh_token)).status, 400);
+
+    // Claude uses its published CIMD identity and the hosted callback.
+    clientId = 'https://claude.ai/oauth/mcp-oauth-client-metadata';
+    redirect = 'https://claude.ai/api/mcp/auth_callback';
+    const claudePageQuery = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope: 'brain.read brain.write', state: 'claude-state' });
+    const claudePage = await fetch(`${base}/oauth/authorize?${claudePageQuery}`);
+    assert.match(claudePage.headers.get('content-security-policy'), /https:\/\/claude\.ai/);
+    assert.match(await claudePage.text(), /Collega Claude a Brain/);
+    claudePageQuery.set('redirect_uri', 'https://attacker.example/callback');
+    assert.equal((await fetch(`${base}/oauth/authorize?${claudePageQuery}`, { redirect: 'manual' })).status, 400);
+    const claudeCode = await authorize('brain.read brain.write');
+    const claudeToken = await exchange(claudeCode);
+    assert.equal(claudeToken.status, 200);
+    const claudeNote = await mcp('tools/call', { name: 'create_note', arguments: { path: 'Claude.md', content: '# Claude' } }, claudeToken.data.access_token);
+    assert.equal(claudeNote.data.result.structuredContent.path, 'Claude.md');
+    assert.equal((await mcp('tools/call', { name: 'read_file', arguments: { path: 'Claude.md' } }, claudeToken.data.access_token)).data.result.structuredContent.content, '# Claude');
+    assert.equal((await refreshToken(claudeToken.data.refresh_token, 'https://chatgpt.com/oauth/client.json')).status, 400);
+    assert.equal((await refreshToken(claudeToken.data.refresh_token)).status, 200);
+    // Codes cannot be exchanged under another client identity.
+    const crossCode = await authorize('brain.read');
+    const crossExchange = await fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'https://chatgpt.com/oauth/client.json', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', resource: `${base}/mcp`, code: crossCode, code_verifier: verifier }) });
+    assert.equal(crossExchange.status, 400);
+    const finalExit = new Promise(resolve => child.once('exit', resolve)); child.kill(); await finalExit;
+    child = startServer();
+    for (let i = 0; i < 50; i++) { try { await fetch(`${base}/api/session`); break; } catch { await new Promise(resolve => setTimeout(resolve, 50)); } }
+    assert.equal((await refreshToken(claudeToken.data.refresh_token)).status, 400, 'i refresh token consumati restano invalidi dopo un riavvio');
+    assert.equal((await refreshToken(rotated.refresh_token, 'https://chatgpt.com/oauth/client.json')).status, 200, 'il rinnovo ChatGPT continua a funzionare');
   } finally {
     child.kill();
     await rm(dataDir, { recursive: true, force: true });

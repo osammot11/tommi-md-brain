@@ -12,7 +12,7 @@ Un archivio personale self-hosted per cartelle, note Markdown e allegati. I dati
 - Collegamenti `[[tra note]]`, collegamenti in uscita e note che citano quella aperta.
 - Proprietà `tags`, `stato` e `data` nel frontmatter YAML, più modelli predefiniti e modelli creati dalle proprie note.
 - Accesso con password, cookie di sessione e token opzionale per client server-to-server.
-- API HTTP separata dall’interfaccia e server MCP remoto integrato con OAuth per ChatGPT.
+- API HTTP separata dall’interfaccia e server MCP remoto integrato con OAuth per ChatGPT e Claude.
 
 Per creare una sottocartella, apri la cartella padre e premi **Sottocartella**. Puoi ripetere l’operazione a qualsiasi livello; le sottocartelle appaiono anche nell’albero laterale. Il click destro su un file o una cartella apre le azioni contestuali; il pulsante accanto a **CARTELLE** chiude tutti i rami dell’albero e i triangoli aprono o chiudono i singoli rami. Su dispositivi touch puoi usare il pulsante `···` nell’elenco dei file.
 
@@ -50,7 +50,7 @@ L’app web è in esecuzione sulla VPS; dopo ogni aggiornamento esegui `git pull
 
 ## API e integrazione MCP
 
-L’interfaccia usa gli endpoint descritti in [`docs/api.md`](docs/api.md). Il server MCP integrato espone strumenti di lettura e modifica su `/mcp`; usa l’API HTTP locale con un token interno temporaneo. Per l’autenticazione di ChatGPT pubblica un flusso OAuth 2.1 con PKCE, che richiede la password personale di Brain. La [guida MCP per ChatGPT](docs/mcp-chatgpt.md) descrive deploy, strumenti, collegamento diretto e compatibilità del pacchetto privato. La configurazione di quest’ultimo è in [`plugin/tommi-brain`](plugin/tommi-brain).
+L’interfaccia usa gli endpoint descritti in [`docs/api.md`](docs/api.md). Il server MCP integrato espone strumenti di lettura e modifica su `/mcp`; usa l’API HTTP locale con un token interno temporaneo. Per l’autenticazione di ChatGPT e Claude pubblica un flusso OAuth 2.1 con PKCE, che richiede la password personale di Brain. La [guida MCP per ChatGPT e Claude](docs/mcp-chatgpt.md) descrive deploy, strumenti, collegamento diretto e compatibilità del pacchetto privato. La configurazione di quest’ultimo è in [`plugin/tommi-brain`](plugin/tommi-brain).
 
 Una futura app desktop Tauri per macOS potrà riutilizzare l’interfaccia e comunicare con questa API. L’autenticazione e la conservazione sicura delle credenziali nel client desktop verranno progettate nella fase Tauri.
 

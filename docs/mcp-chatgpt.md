@@ -1,4 +1,4 @@
-# MCP di Brain per ChatGPT
+# MCP di Brain per ChatGPT e Claude
 
 Brain espone un server MCP Streamable HTTP su `https://brain.produceavalue.com/mcp`. Usa lo stesso processo Node e la stessa logica dei file dell’app web. Nginx esistente inoltra già tutte le richieste, quindi non serve un altro servizio o una nuova porta.
 
@@ -43,6 +43,24 @@ Puoi provare in una nuova chat: “Mostrami le cartelle del mio Brain”, “Cer
 
 ## Sicurezza e manutenzione
 
-La password non è inviata a ChatGPT come strumento: viene inserita direttamente nella pagina HTTPS di Brain durante il collegamento. Il server accetta solo l’identificatore CIMD ufficiale di ChatGPT e il suo redirect registrato, richiede PKCE `S256` e verifica firma, durata, risorsa e permessi di ogni token. Gli access token durano un’ora; i refresh token durano 30 giorni. Ruotare `BRAIN_SESSION_SECRET` invalida tutti i token OAuth e le sessioni web, quindi richiede un nuovo collegamento.
+La password non è inviata a ChatGPT come strumento: viene inserita direttamente nella pagina HTTPS di Brain durante il collegamento. Il server accetta solo gli identificatori CIMD ufficiali configurati di ChatGPT e Claude e i rispettivi redirect registrati, richiede PKCE `S256` e verifica firma, durata, risorsa e permessi di ogni token. Gli access token durano un’ora; i refresh token durano 30 giorni e vengono sostituiti a ogni rinnovo. Il registro dei token già consumati è conservato in `.brain/oauth-refresh-used.json`, così il riutilizzo resta bloccato anche dopo un riavvio. Ruotare `BRAIN_SESSION_SECRET` invalida tutti i token OAuth e le sessioni web, quindi richiede un nuovo collegamento.
 
-L’endpoint di autorizzazione accetta solo il client ChatGPT configurato. Per altri client MCP servono un client OAuth separato o un’estensione del server. Il server MCP usa solo HTTPS in produzione; non pubblicare direttamente la porta Node `32147`.
+L’endpoint di autorizzazione accetta solo i client ChatGPT e Claude configurati. Claude Code, che usa un’identità e un callback locale diversi, non è incluso in questa configurazione. Per altri client MCP servono un client OAuth separato o un’estensione del server. Il server MCP usa solo HTTPS in produzione; non pubblicare direttamente la porta Node `32147`.
+
+## Collegamento a Claude
+
+Dopo il deploy, apri **Customize → Connectors → + Add → Add custom connector** in Claude (per un’organizzazione, l’Owner usa **Organization settings → Connectors → Add → Custom → Web**).
+
+1. Nome: **Tommi Brain**.
+2. URL del server: `https://brain.produceavalue.com/mcp`, quindi **Continue**.
+3. Autenticazione: **Sign in now**.
+4. OAuth client: **Use Claude’s published identity (Recommended)**. Non scegliere Register automatically: Brain usa CIMD e non espone DCR.
+5. Lascia vuoti client secret e request headers. Se viene chiesto il trasporto, usa **Streamable HTTP**.
+6. Aggiungi e connetti. La pagina Brain deve indicare **Collega Claude a Brain** e `claude.ai` come destinazione: inserisci la password Brain e autorizza.
+7. In una chat Claude, abilita Brain da **+ → Connectors**. Prova a elencare le cartelle, creare una nota e rileggerla.
+
+L’identità accettata è `https://claude.ai/oauth/mcp-oauth-client-metadata`, con callback esatto `https://claude.ai/api/mcp/auth_callback`. Il server pubblica i metadati CIMD e risponde HTTP 401 alle richieste MCP senza un access token valido, includendo `WWW-Authenticate` per la scoperta OAuth. Non occorrono nuove porte o modifiche a Nginx. ChatGPT mantiene la propria identità e i suoi token; codici e refresh token non sono intercambiabili tra i due client.
+
+Riferimenti ufficiali: [guida ai connettori personalizzati](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp), [requisiti di autenticazione](https://claude.com/docs/connectors/building/authentication), [identità pubblicata di Claude](https://claude.ai/oauth/mcp-oauth-client-metadata).
+
+La verifica automatica copre login, callback, creazione/lettura, PKCE, isolamento tra client e rinnovo token dopo riavvio. La connessione effettiva nell’account Claude va verificata dopo il deploy.

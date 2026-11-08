@@ -447,7 +447,7 @@ if (backupRoot === root || backupRoot.startsWith(root + sep)) {
 }
 await fs.mkdir(root, { recursive: true });
 await Promise.all([fs.mkdir(trashDir, { recursive: true }), fs.mkdir(versionsDir, { recursive: true }), fs.mkdir(templatesDir, { recursive: true })]);
-const mcp = createMcpHandler({ port, password, secret, apiToken, publicUrl: process.env.BRAIN_PUBLIC_URL || 'https://brain.produceavalue.com' });
+const mcp = createMcpHandler({ port, password, secret, apiToken, oauthStatePath: join(systemDir, 'oauth-refresh-used.json'), publicUrl: process.env.BRAIN_PUBLIC_URL || 'https://brain.produceavalue.com' });
 makeBackup().catch(e => console.error('Backup automatico non riuscito:', e));
 setInterval(() => makeBackup().catch(e => console.error('Backup automatico non riuscito:', e)), 60 * 60 * 1000).unref();
 createServer(async (req, res) => {
