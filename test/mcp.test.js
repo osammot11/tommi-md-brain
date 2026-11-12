@@ -177,6 +177,22 @@ test('MCP e OAuth proteggono note e scritture', async () => {
     assert.equal((await mcp('tools/call', { name: 'read_file', arguments: { path: 'Claude.md' } }, claudeToken.data.access_token)).data.result.structuredContent.content, '# Claude');
     assert.equal((await refreshToken(claudeToken.data.refresh_token, 'https://chatgpt.com/oauth/client.json')).status, 400);
     assert.equal((await refreshToken(claudeToken.data.refresh_token)).status, 200);
+
+    // Jarvis usa la propria identità CIMD e il callback sul suo dominio.
+    clientId = 'https://jarvis.tommasogiovannoni.com/oauth/client-metadata.json';
+    redirect = 'https://jarvis.tommasogiovannoni.com/oauth/callback';
+    const jarvisPageQuery = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirect, resource: `${base}/mcp`, code_challenge: challenge, code_challenge_method: 'S256', scope: 'brain.read brain.write', state: 'jarvis-state' });
+    const jarvisPage = await fetch(`${base}/oauth/authorize?${jarvisPageQuery}`);
+    assert.match(jarvisPage.headers.get('content-security-policy'), /form-action 'self' https:\/\/chatgpt\.com https:\/\/claude\.ai https:\/\/jarvis\.tommasogiovannoni\.com;/);
+    assert.match(await jarvisPage.text(), /Collega Jarvis a Brain/);
+    jarvisPageQuery.set('redirect_uri', 'https://jarvis.tommasogiovannoni.com.evil.example/oauth/callback');
+    assert.equal((await fetch(`${base}/oauth/authorize?${jarvisPageQuery}`, { redirect: 'manual' })).status, 400);
+    const jarvisToken = await exchange(await authorize('brain.read'));
+    assert.equal(jarvisToken.status, 200);
+    assert.equal((await mcp('tools/list', {}, jarvisToken.data.access_token)).status, 200);
+    clientId = 'https://claude.ai/oauth/mcp-oauth-client-metadata';
+    redirect = 'https://claude.ai/api/mcp/auth_callback';
+
     // Codes cannot be exchanged under another client identity.
     const crossCode = await authorize('brain.read');
     const crossExchange = await fetch(`${base}/oauth/token`, { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'https://chatgpt.com/oauth/client.json', redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect', resource: `${base}/mcp`, code: crossCode, code_verifier: verifier }) });

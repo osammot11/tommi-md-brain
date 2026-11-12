@@ -9,8 +9,11 @@ const CHATGPT_CLIENT_ID = 'https://chatgpt.com/oauth/client.json';
 const CHATGPT_REDIRECT = 'https://chatgpt.com/connector_platform_oauth_redirect';
 const CLIENTS = new Map([
   [CHATGPT_CLIENT_ID, { name: 'ChatGPT', redirect: CHATGPT_REDIRECT }],
-  ['https://claude.ai/oauth/mcp-oauth-client-metadata', { name: 'Claude', redirect: 'https://claude.ai/api/mcp/auth_callback' }]
+  ['https://claude.ai/oauth/mcp-oauth-client-metadata', { name: 'Claude', redirect: 'https://claude.ai/api/mcp/auth_callback' }],
+  ['https://jarvis.tommasogiovannoni.com/oauth/client-metadata.json', { name: 'Jarvis', redirect: 'https://jarvis.tommasogiovannoni.com/oauth/callback' }]
 ]);
+// Il form di autorizzazione può reindirizzare solo verso le origini dei client noti.
+const FORM_ACTION_ORIGINS = [...new Set([...CLIENTS.values()].map(client => new URL(client.redirect).origin))].join(' ');
 const SCOPES = new Set(['brain.read', 'brain.write']);
 const AUTH_REQUEST_MS = 30 * 60_000;
 const AUTH_CODE_MS = 5 * 60_000;
@@ -266,7 +269,7 @@ export function createMcpHandler({ port, password, secret, apiToken, oauthStateP
       const client = CLIENTS.get(params.get('client_id'));
       const permissions = scopes.includes('brain.write') ? 'lettura e modifica' : 'sola lettura';
       const html = `<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collega ${client.name} a Brain</title><main><h1>Collega ${client.name} a Brain</h1><p>${client.name} chiede accesso in ${permissions} al tuo archivio personale. Destinazione: ${escapeHtml(new URL(client.redirect).hostname)}. Autorizza solo se hai iniziato tu il collegamento. Questa richiesta resta valida per 30 minuti.</p><form method="post" action="/oauth/authorize"><input type="hidden" name="request_id" value="${escapeHtml(requestId)}"><label>Password Brain <input type="password" name="password" required autocomplete="current-password"></label><button type="submit">Autorizza</button></form></main></html>`;
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self' https://chatgpt.com https://claude.ai; frame-ancestors 'none'", 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': `default-src 'none'; style-src 'self'; form-action 'self' ${FORM_ACTION_ORIGINS}; frame-ancestors 'none'`, 'X-Content-Type-Options': 'nosniff' });
       return res.end(html);
     }
     if (url.pathname === '/oauth/authorize' && req.method === 'POST') {
